@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>30天親子互動小日記｜滿３０天送小禮物！</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Cozy Storytime -->
+    <!-- Application Structure Plan: The app uses a responsive grid of 30 cards, each representing a day. Clicking a card opens a modal where users can write their diary entry and also upload an image. A new section is added at the top to display a progress bar and statistics (days completed, percentage) to gamify the experience and provide a clear sense of progress. The app saves both the text and the image (converted to Base64) to localStorage. A new feature has been added to provide encouraging messages after a successful save. The flow remains simple: click, add content (text/photo), save, see the card and progress bar update, and receive a motivational message. For day 30, a special modal with a reward link is shown. -->
+    <!-- Visualization & Content Choices: Report Info: 30 daily prompts, user-uploaded images, and progress tracking. Goal: Organize prompts, allow interactive multimedia entries, show challenge progress, and motivate the user. Viz/Presentation Method: An HTML/CSS grid of clickable cards and a new progress dashboard with a horizontal progress bar. A simple toast-like notification is used for encouragement messages. A special modal is used for the Day 30 reward. Interaction: On-click reveal of modal, text input, file selection, and save logic. The save function now updates both the card display, the progress dashboard, and triggers the encouragement message or the special Day 30 reward modal. Justification: The encouragement messages directly address the user's request, adding a positive reinforcement loop that is especially effective for children. The special modal for Day 30 gamifies the final step, making the reward feel more significant. Library/Method: Vanilla JS for all logic and event handling, Tailwind CSS for all styling, FileReader for Base64 conversion. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #FDFBF5;
+            color: #5D4037;
+        }
+        .diary-card {
+            transform-style: preserve-3d;
+            transition: transform 0.6s;
+        }
+        .diary-card.is-flipped {
+            transform: rotateY(180deg);
+        }
+        .card-face {
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+        }
+        .card-back {
+            transform: rotateY(180deg);
+        }
+        .completed .card-front {
+            background-color: #A5D6A7;
+            color: #1B5E20;
+            border-color: #66BB6A;
+        }
+        .has-image .card-front {
+            background-color: #E6EE9C;
+            border-color: #DCE775;
+            color: #33691E;
+        }
+    </style>
+</head>
+<body class="antialiased">
+    <div class="container mx-auto px-4 py-8 md:py-12 max-w-5xl">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl md:text-5xl font-bold text-amber-800">30天親子互動小日記</h1>
+            <p class="mt-2 text-lg text-amber-700">寫日記，是送給孩子探索世界與認識自己的最好禮物。</p>
+        </header>
+
+        <section id="progress-section" class="bg-amber-100 border border-amber-300 rounded-lg p-6 mb-10 shadow-sm">
+            <h2 class="text-2xl font-bold text-amber-900 mb-4">挑戰進度</h2>
+            <div class="flex flex-col md:flex-row items-center md:justify-between space-y-4 md:space-y-0 md:space-x-8">
+                <div class="flex-1 w-full">
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-xl font-semibold text-amber-800">已完成天數</span>
+                        <span id="completed-days" class="text-2xl font-bold text-amber-800">0 / 30 天</span>
+                    </div>
+                    <div class="w-full bg-amber-200 rounded-full h-4 relative overflow-hidden">
+                        <div id="progress-bar" class="bg-amber-600 h-full rounded-full transition-all duration-500 ease-in-out" style="width: 0%;"></div>
+                    </div>
+                </div>
+                <div class="text-center md:text-right">
+                    <span id="progress-percentage" class="text-4xl font-extrabold text-amber-800">0%</span>
+                    <p class="text-sm text-amber-700 mt-1">挑戰進度</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="instructions" class="bg-amber-50 border border-amber-200 rounded-lg p-6 mb-10 shadow-sm">
+            <h2 class="text-2xl font-bold mb-4 text-amber-900 flex items-center">
+                <span class="text-3xl mr-3">💡</span> 給爸媽的溫馨小提醒
+            </h2>
+            <div class="space-y-3 text-amber-800 text-base md:text-lg">
+                <p>這不僅是一份日記清單，更是一個開啟親子對話的魔法工具。我們將靜態的學習單設計成一個充滿驚喜的互動網頁，讓孩子每天都能「翻」開一個新問題，像玩遊戲一樣，輕鬆愉快地養成記錄生活的好習慣。</p>
+                <ul class="list-disc list-inside pl-2 space-y-2">
+                    <li>挑一個輕鬆時刻： 每天晚餐後或睡前，找個舒適的角落，和孩子一起聊聊今天。</li>
+                    <li>不要求字數： 孩子寫多寫少都沒關係，重點是讓他們享受分享的過程。</li>
+                    <li>鼓勵重於要求： 寫出來的每一個字都值得被肯定，讓孩子覺得寫日記是件開心的事。</li>
+                </ul>
+                 <p class="pt-2">點擊下方的數字卡片，開始今天的日記冒險吧！內容與圖片會自動儲存在您的瀏覽器中。</p>
+            </div>
+        </section>
+
+        <main id="diary-grid" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4">
+        </main>
+
+        <!-- General Modal for Diary Entry -->
+        <div id="modal" class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center p-4 hidden z-50">
+            <div class="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col p-6 relative">
+                <button id="close-modal" class="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+                <div id="modal-content" class="overflow-y-auto">
+                </div>
+            </div>
+        </div>
+        
+        <!-- Special Modal for Day 30 Completion -->
+        <div id="completion-modal" class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center p-4 hidden z-50">
+            <div class="bg-gradient-to-br from-yellow-100 via-white to-green-100 rounded-2xl shadow-2xl w-full max-w-lg flex flex-col p-8 relative border-4 border-yellow-400">
+                <div class="text-center">
+                    <div class="text-6xl mb-4 animate-bounce">🎉</div>
+                    <h3 class="text-4xl font-bold text-yellow-800 mb-2">恭喜你！</h3>
+                    <p class="text-2xl font-semibold text-gray-800 mb-4">成功完成30天小日記挑戰！</p>
+                    <p class="text-lg text-gray-600 mb-6">這份堅持與努力值得嘉獎，你真的太棒了！</p>
+                    <a id="coupon-link" href="https://bmai.app/c100692c" target="_blank" class="inline-block bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-8 rounded-full shadow-lg transition-transform transform hover:scale-105">
+                        領取你的專屬禮物！
+                    </a>
+                    <p class="text-sm text-gray-500 mt-4">親子天下Shopping 100元折價券</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="toast" class="fixed bottom-8 left-1/2 -translate-x-1/2 bg-amber-600 text-white text-center py-3 px-6 rounded-lg shadow-lg opacity-0 transition-opacity duration-300 z-50">
+        </div>
+    </div>
+
+    <script>
+        const diaryData = [
+            { day: 1, theme: '從日常開始', prompt: '今天讓你最開心的事情是什麼？' },
+            { day: 2, theme: '從日常開始', prompt: '今天的午餐最好吃的是哪一道？為什麼？' },
+            { day: 3, theme: '從日常開始', prompt: '今天在學校發生一件有趣的小事？' },
+            { day: 4, theme: '從日常開始', prompt: '今天的天氣像什麼東西？（例：太陽像大火球☀️）' },
+            { day: 5, theme: '從日常開始', prompt: '你今天學到一個新的知識是什麼？' },
+            { day: 6, theme: '從日常開始', prompt: '今天有沒有遇到什麼小小挫折？' },
+            { day: 7, theme: '從日常開始', prompt: '如果用一個顏色形容今天，你會選哪一個？' },
+            { day: 8, theme: '生活觀察', prompt: '路上你看到最特別的一樣東西？' },
+            { day: 9, theme: '生活觀察', prompt: '今天聽到一個最有趣的聲音是什麼？' },
+            { day: 10, theme: '生活觀察', prompt: '如果你是一隻小鳥，今天會飛去哪裡？' },
+            { day: 11, theme: '生活觀察', prompt: '今天和同學的對話中，哪一句話讓你印象最深？' },
+            { day: 12, theme: '生活觀察', prompt: '你今天幫助了誰嗎？感覺怎麼樣？' },
+            { day: 13, theme: '生活觀察', prompt: '今天覺得最香的味道是什麼？' },
+            { day: 14, theme: '生活觀察', prompt: '今天覺得最舒服的一個時刻是什麼？' },
+            { day: 15, theme: '想像力挑戰', prompt: '如果今天的天空會說話，它會跟你說什麼？' },
+            { day: 16, theme: '想像力挑戰', prompt: '如果你可以當一天的老師，你會做什麼？' },
+            { day: 17, theme: '想像力挑戰', prompt: '如果你的書包會講話，它會怎麼抱怨？' },
+            { day: 18, theme: '想像力挑戰', prompt: '如果下雨天能變成糖果雨，你會怎麼做？' },
+            { day: 19, theme: '想像力挑戰', prompt: '假如你是一部卡通人物，今天會發生什麼冒險？' },
+            { day: 20, theme: '想像力挑戰', prompt: '如果你能把今天拍成一部短片，片名會叫什麼？' },
+            { day: 21, theme: '想像力挑戰', prompt: '今天你最想要擁有什麼超能力？' },
+            { day: 22, theme: '心情與反思', prompt: '今天有沒有讓你覺得驕傲的事？' },
+            { day: 23, theme: '心情與反思', prompt: '今天有沒有一件事讓你有點後悔？' },
+            { day: 24, theme: '心情與反思', prompt: '今天你覺得最幸運的時刻是什麼？' },
+            { day: 25, theme: '心情與反思', prompt: '今天如果要寫一句「感謝」的話，你想謝謝誰？' },
+            { day: 26, theme: '心情與反思', prompt: '今天你有沒有發現一個新朋友？' },
+            { day: 27, theme: '心情與反思', prompt: '今天你對自己說的一句鼓勵的話？' },
+            { day: 28, theme: '心情與反思', prompt: '今天你最想要把什麼事情留在回憶裡？' },
+            { day: 29, theme: '心情與反思', prompt: '今天如果要用三個表情符號來形容，會是哪三個？' },
+            { day: 30, theme: '心情與反思', prompt: '今天，你想寫給明天的自己一句話？' }
+        ];
+        
+        const encouragingWords = [
+            "太棒了！今天也完成了挑戰！",
+            "你真棒！又離目標更近一步了！",
+            "日記寫得真好，為你拍拍手！",
+            "哇！你每天都在進步呢！",
+            "繼續加油，期待你明天的日記！"
+        ];
+        
+        const diaryGrid = document.getElementById('diary-grid');
+        const modal = document.getElementById('modal');
+        const completionModal = document.getElementById('completion-modal');
+        const modalContent = document.getElementById('modal-content');
+        const closeModalBtn = document.getElementById('close-modal');
+        const completedDaysEl = document.getElementById('completed-days');
+        const progressPercentageEl = document.getElementById('progress-percentage');
+        const progressBarEl = document.getElementById('progress-bar');
+        const toast = document.getElementById('toast');
+
+        function showToast(message) {
+            toast.textContent = message;
+            toast.classList.add('opacity-100');
+            setTimeout(() => {
+                toast.classList.remove('opacity-100');
+            }, 3000);
+        }
+
+        function loadEntries() {
+            const entries = JSON.parse(localStorage.getItem('diaryEntries') || '{}');
+            return entries;
+        }
+
+        function saveEntry(day, content, image) {
+            const entries = loadEntries();
+            entries[day] = { text: content, image: image };
+            localStorage.setItem('diaryEntries', JSON.stringify(entries));
+            
+            if (content.trim() !== '' || image) {
+                if (day === 30) {
+                    closeModal(); // Close the regular modal first
+                    completionModal.classList.remove('hidden');
+                } else {
+                    const randomMessage = encouragingWords[Math.floor(Math.random() * encouragingWords.length)];
+                    showToast(randomMessage);
+                }
+            }
+        }
+        
+        function openModal(dayData) {
+            const entries = loadEntries();
+            const entry = entries[dayData.day] || {};
+            const entryText = entry.text || '';
+            const entryImage = entry.image || '';
+
+            modalContent.innerHTML = `
+                <div class="text-center mb-4">
+                    <span class="text-sm bg-amber-100 text-amber-800 px-3 py-1 rounded-full">${dayData.theme}</span>
+                    <h3 class="text-2xl font-bold mt-2 text-amber-900">第 ${dayData.day} 天</h3>
+                </div>
+                <p class="text-lg text-center text-gray-700 mb-4">${dayData.prompt}</p>
+                <div class="bg-amber-50 p-4 rounded-lg border border-amber-200 mb-4">
+                    <p class="text-sm text-amber-700 text-center">輕鬆記錄，兩種方式任你選！</p>
+                    <ul class="list-none text-sm text-amber-800 space-y-2 mt-2">
+                        <li>1. 畫下來或寫在紙上： 拍張照片，直接點選下方上傳圖片。</li>
+                        <li>2. 直接打字： 在下方空格中，輸入你的心情或日記內容。</li>
+                    </ul>
+                </div>
+                <div id="image-preview" class="mb-4">
+                    ${entryImage ? `<img src="${entryImage}" class="w-full h-auto rounded-lg shadow-md mb-2 object-contain" alt="日記圖片預覽">` : ''}
+                </div>
+                <div class="mb-4 flex flex-col items-start space-y-2">
+                    <label for="image-upload" class="bg-amber-600 text-white font-bold py-2 px-4 rounded-lg cursor-pointer hover:bg-amber-700 transition duration-300 text-sm">
+                        上傳圖片
+                    </label>
+                    <input type="file" id="image-upload" accept="image/*" class="hidden">
+                </div>
+                <textarea id="diary-entry-${dayData.day}" class="w-full h-48 p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-amber-400 focus:border-amber-400 transition" placeholder="在這裡寫下你的小日記...">${entryText}</textarea>
+                <div class="mt-4 flex justify-end">
+                    <button id="save-btn" class="bg-amber-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-amber-700 transition duration-300">儲存</button>
+                </div>
+            `;
+            modal.classList.remove('hidden');
+
+            const imageUpload = document.getElementById('image-upload');
+            const imagePreviewDiv = document.getElementById('image-preview');
+            let uploadedImageBase64 = entryImage;
+
+            imageUpload.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        uploadedImageBase64 = e.target.result;
+                        imagePreviewDiv.innerHTML = `<img src="${uploadedImageBase64}" class="w-full h-auto rounded-lg shadow-md mb-2 object-contain" alt="日記圖片預覽">`;
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
+
+            const saveBtn = document.getElementById('save-btn');
+            saveBtn.onclick = () => {
+                const textarea = document.getElementById(`diary-entry-${dayData.day}`);
+                saveEntry(dayData.day, textarea.value, uploadedImageBase64);
+                
+                // Only close the modal and re-render if it's not Day 30
+                if (dayData.day !== 30) {
+                  closeModal();
+                  renderGrid();
+                  updateProgressDisplay();
+                } else {
+                  // For Day 30, saving triggers the completion modal, so we close it here and let the other modal show up.
+                  closeModal();
+                  renderGrid();
+                  updateProgressDisplay();
+                }
+            };
+        }
+
+        function closeModal() {
+            modal.classList.add('hidden');
+        }
+        
+        function closeCompletionModal() {
+            completionModal.classList.add('hidden');
+        }
+
+        function updateProgressDisplay() {
+            const entries = loadEntries();
+            const completedCount = Object.values(entries).filter(entry => entry.text.trim() !== '' || entry.image).length;
+            const totalDays = diaryData.length;
+            const percentage = totalDays > 0 ? Math.round((completedCount / totalDays) * 100) : 0;
+
+            completedDaysEl.textContent = `${completedCount} / ${totalDays} 天`;
+            progressPercentageEl.textContent = `${percentage}%`;
+            progressBarEl.style.width = `${percentage}%`;
+        }
+
+        function renderGrid() {
+            const entries = loadEntries();
+            diaryGrid.innerHTML = '';
+            diaryData.forEach(item => {
+                const entry = entries[item.day] || {};
+                const hasContent = (entry.text && entry.text.trim() !== '') || entry.image;
+                const hasImage = entry.image;
+
+                const card = document.createElement('div');
+                card.className = `h-28 md:h-32 rounded-lg cursor-pointer flex justify-center items-center shadow-md transition-transform transform hover:scale-105 relative ${hasContent ? 'completed' : ''} ${hasImage ? 'has-image' : ''}`;
+                card.innerHTML = `
+                    <div class="card-front w-full h-full bg-amber-100 border-2 border-amber-200 text-amber-800 flex flex-col justify-center items-center rounded-lg p-2">
+                        <span class="text-xs">第</span>
+                        <span class="text-4xl font-bold">${item.day}</span>
+                        <span class="text-xs">天</span>
+                    </div>
+                `;
+                if (hasImage) {
+                    const imageIcon = document.createElement('div');
+                    imageIcon.className = `absolute top-2 right-2 text-xl`;
+                    imageIcon.innerHTML = '🖼️';
+                    card.querySelector('.card-front').appendChild(imageIcon);
+                }
+                card.addEventListener('click', () => openModal(item));
+                diaryGrid.appendChild(card);
+            });
+        }
+        
+        closeModalBtn.addEventListener('click', closeModal);
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeModal();
+            }
+        });
+
+        // Add event listener to close the completion modal
+        completionModal.addEventListener('click', (e) => {
+            if (e.target === completionModal || e.target.tagName === 'A') {
+                closeCompletionModal();
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            renderGrid();
+            updateProgressDisplay();
+        });
+    </script>
+</body>
+</html>
