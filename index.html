@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>30天親子互動小日記｜滿３０天送小禮物！</title>
+    <title>30天親子互動小日記</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -48,7 +48,7 @@
     <div class="container mx-auto px-4 py-8 md:py-12 max-w-5xl">
         <header class="text-center mb-8">
             <h1 class="text-4xl md:text-5xl font-bold text-amber-800">30天親子互動小日記</h1>
-            <p class="mt-2 text-lg text-amber-700">寫日記，是送給孩子探索世界與認識自己的最好禮物。</p>
+            <p class="mt-2 text-lg text-amber-700">讓孩子每天練習，小日記超輕鬆。</p>
         </header>
 
         <section id="progress-section" class="bg-amber-100 border border-amber-300 rounded-lg p-6 mb-10 shadow-sm">
@@ -76,16 +76,21 @@
             </h2>
             <div class="space-y-3 text-amber-800 text-base md:text-lg">
                 <p>這不僅是一份日記清單，更是一個開啟親子對話的魔法工具。我們將靜態的學習單設計成一個充滿驚喜的互動網頁，讓孩子每天都能「翻」開一個新問題，像玩遊戲一樣，輕鬆愉快地養成記錄生活的好習慣。</p>
-                <ul class="list-disc list-inside pl-2 space-y-2">
-                    <li>挑一個輕鬆時刻： 每天晚餐後或睡前，找個舒適的角落，和孩子一起聊聊今天。</li>
-                    <li>不要求字數： 孩子寫多寫少都沒關係，重點是讓他們享受分享的過程。</li>
-                    <li>鼓勵重於要求： 寫出來的每一個字都值得被肯定，讓孩子覺得寫日記是件開心的事。</li>
-                </ul>
-                 <p class="pt-2">點擊下方的數字卡片，開始今天的日記冒險吧！內容與圖片會自動儲存在您的瀏覽器中。</p>
+                <div id="expandable-content" class="max-h-0 overflow-hidden transition-all duration-500 ease-in-out">
+                    <ul class="list-disc list-inside pl-2 space-y-2 mt-4">
+                        <li>挑一個輕鬆時刻： 每天晚餐後或睡前，找個舒適的角落，和孩子一起聊聊今天。</li>
+                        <li>不要求字數： 孩子寫多寫少都沒關係，重點是讓他們享受分享的過程。</li>
+                        <li>鼓勵重於要求： 寫出來的每一個字都值得被肯定，讓孩子覺得寫日記是件開心的事。</li>
+                    </ul>
+                    <p class="pt-4">點擊下方的數字卡片，開始今天的日記冒險吧！內容與圖片會自動儲存在您的瀏覽器中。</p>
+                </div>
+                <button id="toggle-instructions" class="mt-4 text-amber-600 hover:text-amber-800 font-semibold flex items-center">
+                    閱讀更多 ▼
+                </button>
             </div>
         </section>
 
-        <main id="diary-grid" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4">
+        <main id="diary-grid" class="grid grid-cols-5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4">
         </main>
 
         <!-- General Modal for Diary Entry -->
@@ -168,6 +173,8 @@
         const progressPercentageEl = document.getElementById('progress-percentage');
         const progressBarEl = document.getElementById('progress-bar');
         const toast = document.getElementById('toast');
+        const expandableContent = document.getElementById('expandable-content');
+        const toggleBtn = document.getElementById('toggle-instructions');
 
         function showToast(message) {
             toast.textContent = message;
@@ -259,6 +266,10 @@
                   closeModal();
                   renderGrid();
                   updateProgressDisplay();
+                  const nextDayCard = document.querySelector(`[data-day="${dayData.day + 1}"]`);
+                  if (nextDayCard) {
+                      nextDayCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }
                 } else {
                   // For Day 30, saving triggers the completion modal, so we close it here and let the other modal show up.
                   closeModal();
@@ -297,6 +308,7 @@
 
                 const card = document.createElement('div');
                 card.className = `h-28 md:h-32 rounded-lg cursor-pointer flex justify-center items-center shadow-md transition-transform transform hover:scale-105 relative ${hasContent ? 'completed' : ''} ${hasImage ? 'has-image' : ''}`;
+                card.dataset.day = item.day; // Add data-day attribute for easy selection
                 card.innerHTML = `
                     <div class="card-front w-full h-full bg-amber-100 border-2 border-amber-200 text-amber-800 flex flex-col justify-center items-center rounded-lg p-2">
                         <span class="text-xs">第</span>
@@ -326,6 +338,17 @@
         completionModal.addEventListener('click', (e) => {
             if (e.target === completionModal || e.target.tagName === 'A') {
                 closeCompletionModal();
+            }
+        });
+
+        toggleBtn.addEventListener('click', () => {
+            const isExpanded = expandableContent.classList.contains('max-h-screen');
+            if (isExpanded) {
+                expandableContent.classList.remove('max-h-screen');
+                toggleBtn.textContent = '閱讀更多 ▼';
+            } else {
+                expandableContent.classList.add('max-h-screen');
+                toggleBtn.textContent = '收起 ▲';
             }
         });
 
