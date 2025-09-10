@@ -3,15 +3,438 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3天親子互動小日記</title>
+    <title>3天親子互動小日記 - 管理者版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
-    <!-- Chosen Palette: Cozy Storytime -->
-    <!-- Application Structure Plan: The app uses a responsive grid of 30 cards, each representing a day. Clicking a card opens a modal where users can write their diary entry and also upload an image. A new section is added at the top to display a progress bar and statistics (days completed, percentage) to gamify the experience and provide a clear sense of progress. The app saves both the text and the image (converted to Base64) to localStorage. A new feature has been added to provide encouraging messages after a successful save. The flow remains simple: click, add content (text/photo), save, see the card and progress bar update, and receive a motivational message. For day 30, a special modal with a reward link is shown. -->
-    <!-- Visualization & Content Choices: Report Info: 30 daily prompts, user-uploaded images, and progress tracking. Goal: Organize prompts, allow interactive multimedia entries, show challenge progress, and motivate the user. Viz/Presentation Method: An HTML/CSS grid of clickable cards and a new progress dashboard with a horizontal progress bar. A simple toast-like notification is used for encouragement messages. A special modal is used for the Day 30 reward. Interaction: On-click reveal of modal, text input, file selection, and save logic. The save function now updates both the card display, the progress dashboard, and triggers the encouragement message or the special Day 30 reward modal. Justification: The encouragement messages directly address the user's request, adding a positive reinforcement loop that is especially effective for children. The special modal for Day 30 gamifies the final step, making the reward feel more significant. Library/Method: Vanilla JS for all logic and event handling, Tailwind CSS for all styling, FileReader for Base64 conversion. -->
-    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <!-- Firebase Imports -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot, setDoc, setLogLevel, collection, getDocs, query, where, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global variables for Firebase
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
+        // This is a special, hard-coded Admin ID for demonstration.
+        // In a real application, you would use a more robust authentication system.
+        const ADMIN_ID = "admin-Shopping";
+
+        // Initialize Firebase services
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // Set Firebase log level for debugging
+        setLogLevel('Debug');
+
+        let currentUserId = null; // The internal Firebase UID
+        let currentUserSimpleId = null; // The simplified ID for display
+        let unsubscribe = null;
+        let isAdmin = false;
+        let isInitialized = false;
+
+        async function createOrGetSimpleId(uid) {
+            if (!auth.currentUser) {
+                console.error("Firestore operation denied: User not authenticated.");
+                return null;
+            }
+            const userRef = doc(db, `artifacts/${appId}/public/data/user_profiles`, uid);
+            try {
+                const userSnap = await getDoc(userRef);
+                if (userSnap.exists() && userSnap.data().simpleId) {
+                    return userSnap.data().simpleId;
+                } else {
+                    const newSimpleId = Math.random().toString(36).substring(2, 8); // A short, random alphanumeric string
+                    await setDoc(userRef, { simpleId: newSimpleId, uid: uid }, { merge: true });
+                    return newSimpleId;
+                }
+            } catch (e) {
+                console.error("Error creating or getting simple ID:", e);
+                throw e; // Propagate the error
+            }
+        }
+        
+        // Helper function to get Firebase UID from simple ID
+        async function getUidFromSimpleId(simpleId) {
+            if (!auth.currentUser) {
+                console.error("Firestore operation denied: User not authenticated.");
+                return null;
+            }
+            const usersRef = collection(db, `artifacts/${appId}/public/data/user_profiles`);
+            const q = query(usersRef, where("simpleId", "==", simpleId));
+            const querySnapshot = await getDocs(q);
+            if (!querySnapshot.empty) {
+                return querySnapshot.docs[0].id;
+            }
+            return null;
+        }
+        
+        function updateUIState(state) {
+            const userIdDisplay = document.getElementById('user-id-display');
+            const currentViewingIdEl = document.getElementById('current-viewing-id');
+            const mainContent = document.getElementById('main-content');
+            const loadingMessage = document.getElementById('loading-message');
+
+            if (state === 'loading') {
+                userIdDisplay.textContent = `正在載入使用者 ID...`;
+                loadingMessage.classList.remove('hidden');
+                mainContent.classList.add('hidden');
+            } else if (state === 'loaded') {
+                userIdDisplay.textContent = `你的使用者 ID: ${currentUserSimpleId} ${isAdmin ? '(管理者)' : ''}`;
+                currentViewingIdEl.textContent = `目前正在檢視的 ID: ${currentUserSimpleId}`;
+                loadingMessage.classList.add('hidden');
+                mainContent.classList.remove('hidden');
+            } else if (state === 'error') {
+                userIdDisplay.textContent = `載入失敗，請稍後再試。`;
+                loadingMessage.classList.add('hidden');
+                mainContent.classList.add('hidden');
+            }
+        }
+
+        // Authenticate the user and set up the main logic
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                currentUserId = user.uid;
+                try {
+                    currentUserSimpleId = await createOrGetSimpleId(currentUserId);
+                    isAdmin = (currentUserSimpleId === ADMIN_ID);
+
+                    if (isAdmin) {
+                        document.getElementById('admin-section').classList.remove('hidden');
+                        document.getElementById('share-view').classList.add('hidden');
+                        document.getElementById('user-diary-view').classList.add('hidden');
+                        loadAllUsers();
+                    } else {
+                        document.getElementById('admin-section').classList.add('hidden');
+                        document.getElementById('share-view').classList.remove('hidden');
+                        document.getElementById('user-diary-view').classList.remove('hidden');
+                        initApp(currentUserId, currentUserSimpleId);
+                    }
+                    updateUIState('loaded');
+                } catch (e) {
+                console.error("Initialization failed:", e);
+                    updateUIState('error');
+                }
+            } else {
+                // User is not signed in, so we sign them in here
+                try {
+                    if (initialAuthToken) {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                } catch (error) {
+                    console.error("Authentication failed:", error);
+                    updateUIState('error');
+                }
+            }
+        });
+        
+        // This part is now outside the initApp function
+        const expandableContent = document.getElementById('expandable-content');
+        const toggleBtn = document.getElementById('toggle-instructions');
+        if (toggleBtn && expandableContent) {
+            toggleBtn.addEventListener('click', () => {
+                const isExpanded = expandableContent.classList.contains('max-h-screen');
+                if (isExpanded) {
+                    expandableContent.classList.remove('max-h-screen');
+                    toggleBtn.textContent = '閱讀更多 ▼';
+                } else {
+                    expandableContent.classList.add('max-h-screen');
+                    toggleBtn.textContent = '收起 ▲';
+                }
+            });
+        }
+
+        async function loadAllUsers() {
+            if (!auth.currentUser) {
+                console.error("Firestore operation denied: User not authenticated.");
+                return;
+            }
+            console.log("Admin mode: Loading all user diaries.");
+            const usersList = document.getElementById('users-list');
+            usersList.innerHTML = `<p class="text-center text-gray-500">正在載入所有使用者...</p>`;
+
+            const usersRef = collection(db, `artifacts/${appId}/public/data/user_profiles`);
+            
+            const querySnapshot = await getDocs(usersRef);
+            
+            usersList.innerHTML = ''; // Clear loading message
+
+            if (querySnapshot.empty) {
+                usersList.innerHTML = `<p class="text-center text-gray-500">目前沒有任何日記。</p>`;
+            } else {
+                querySnapshot.forEach(doc => {
+                    const userSimpleId = doc.data().simpleId;
+                    const userItem = document.createElement('li');
+                    userItem.className = "p-3 border rounded-lg hover:bg-stone-100 cursor-pointer transition text-center break-all";
+                    userItem.textContent = `使用者 ID: ${userSimpleId}`;
+                    userItem.addEventListener('click', async () => {
+                        const uid = doc.id; // Use the Firebase UID as the document ID
+                        initApp(uid, userSimpleId);
+                        document.getElementById('switch-back-btn').classList.remove('hidden');
+                    });
+                    usersList.appendChild(userItem);
+                });
+            }
+        }
+
+        function initApp(userIdToLoad, simpleIdToDisplay) {
+            console.log(`Loading diary for user ID: ${userIdToLoad}`);
+
+            const diaryData = [
+                { day: 1, theme: '從日常開始', prompt: '今天讓你最開心的事情是什麼？' },
+                { day: 2, theme: '從日常開始', prompt: '今天的午餐最好吃的是哪一道？為什麼？' },
+                { day: 3, theme: '從日常開始', prompt: '今天在學校發生一件有趣的小事？' }
+            ];
+
+            const encouragingWords = [
+                "太棒了！今天也完成了挑戰！",
+                "你真棒！又離目標更近一步了！",
+                "日記寫得真好，為你拍拍手！",
+                "哇！你每天都在進步呢！",
+                "繼續加油，期待你明天的日記！"
+            ];
+            
+            const diaryGrid = document.getElementById('diary-grid');
+            const modal = document.getElementById('modal');
+            const completionModal = document.getElementById('completion-modal');
+            const modalContent = document.getElementById('modal-content');
+            const closeModalBtn = document.getElementById('close-modal');
+            const completedDaysEl = document.getElementById('completed-days');
+            const progressPercentageEl = document.getElementById('progress-percentage');
+            const progressBarEl = document.getElementById('progress-bar');
+            const toast = document.getElementById('toast');
+            const loadIdInput = document.getElementById('load-id-input');
+            const loadIdBtn = document.getElementById('load-id-btn');
+            const switchBackBtn = document.getElementById('switch-back-btn');
+            const currentViewingIdEl = document.getElementById('current-viewing-id');
+
+            document.getElementById('share-view').classList.remove('hidden');
+            document.getElementById('user-diary-view').classList.remove('hidden');
+            document.getElementById('admin-section').classList.add('hidden'); // Ensure admin section is hidden
+            document.getElementById('current-viewing-id').textContent = `目前正在檢視的 ID: ${simpleIdToDisplay}`;
+
+            function showToast(message) {
+                toast.textContent = message;
+                toast.classList.add('opacity-100');
+                setTimeout(() => {
+                    toast.classList.remove('opacity-100');
+                }, 3000);
+            }
+            
+            async function saveEntry(day, content, image) {
+                if (!auth.currentUser) {
+                    showToast("身份驗證失敗，請重試。");
+                    return;
+                }
+                if (userIdToLoad !== currentUserId) {
+                    showToast("你沒有權限修改其他人的日記！");
+                    return;
+                }
+                const diaryRef = doc(db, `artifacts/${appId}/public/data/diaries`, userIdToLoad);
+                let entriesToSave = { ...entries };
+                entriesToSave[day] = { text: content, image: image, timestamp: Date.now() };
+
+                try {
+                    await setDoc(diaryRef, entriesToSave);
+                    console.log(`Entry for day ${day} saved successfully.`);
+
+                    if (content.trim() !== '' || image) {
+                        if (day === 3) {
+                            closeModal();
+                            completionModal.classList.remove('hidden');
+                        } else {
+                            const randomMessage = encouragingWords[Math.floor(Math.random() * encouragingWords.length)];
+                            showToast(randomMessage);
+                        }
+                    }
+                } catch (e) {
+                    console.error("Error saving document: ", e);
+                }
+            }
+
+            // Real-time listener for the current user's diary
+            if (unsubscribe) {
+                unsubscribe();
+            }
+
+            const diaryRef = doc(db, `artifacts/${appId}/public/data/diaries`, userIdToLoad);
+            let entries = {};
+
+            unsubscribe = onSnapshot(diaryRef, (snapshot) => {
+                if (snapshot.exists()) {
+                    entries = snapshot.data() || {};
+                    renderGrid();
+                    updateProgressDisplay();
+                    console.log("Entries updated from Firestore.");
+                } else {
+                    console.log("No diary data found. Initializing new entries.");
+                    entries = {};
+                    renderGrid();
+                    updateProgressDisplay();
+                }
+            }, (error) => {
+                console.error("Error listening to Firestore:", error);
+            });
+
+            function updateProgressDisplay() {
+                const completedCount = Object.values(entries).filter(entry => entry.text && entry.text.trim() !== '' || entry.image).length;
+                const totalDays = diaryData.length;
+                const percentage = totalDays > 0 ? Math.round((completedCount / totalDays) * 100) : 0;
+
+                completedDaysEl.textContent = `${completedCount} / ${totalDays} 天`;
+                progressPercentageEl.textContent = `${percentage}%`;
+                progressBarEl.style.width = `${percentage}%`;
+            }
+
+            function renderGrid() {
+                diaryGrid.innerHTML = '';
+                diaryData.forEach(item => {
+                    const entry = entries[item.day] || {};
+                    const hasContent = (entry.text && entry.text.trim() !== '') || entry.image;
+                    const hasImage = entry.image;
+
+                    const card = document.createElement('div');
+                    card.className = `h-28 md:h-32 w-28 md:w-32 rounded-lg cursor-pointer flex-shrink-0 flex justify-center items-center shadow-md transition-transform transform hover:scale-105 relative ${hasContent ? 'completed' : ''} ${hasImage ? 'has-image' : ''}`;
+                    card.dataset.day = item.day;
+                    card.innerHTML = `
+                        <div class="card-front w-full h-full bg-amber-100 border-2 border-amber-200 text-amber-800 flex flex-col justify-center items-center rounded-lg p-2">
+                            <span class="text-xs">第</span>
+                            <span class="text-4xl font-bold">${item.day}</span>
+                            <span class="text-xs">天</span>
+                        </div>
+                    `;
+                    if (hasImage) {
+                        const imageIcon = document.createElement('div');
+                        imageIcon.className = `absolute top-2 right-2 text-xl`;
+                        imageIcon.innerHTML = '🖼️';
+                        card.querySelector('.card-front').appendChild(imageIcon);
+                    }
+                    card.addEventListener('click', () => openModal(item));
+                    diaryGrid.appendChild(card);
+                });
+            }
+
+            function openModal(dayData) {
+                const entry = entries[dayData.day] || {};
+                const entryText = entry.text || '';
+                const entryImage = entry.image || '';
+                const isViewingOwnDiary = userIdToLoad === currentUserId;
+
+                modalContent.innerHTML = `
+                    <div class="text-center mb-4">
+                        <span class="text-sm bg-amber-100 text-amber-800 px-3 py-1 rounded-full">${dayData.theme}</span>
+                        <h3 class="text-2xl font-bold mt-2 text-amber-900">第 ${dayData.day} 天</h3>
+                    </div>
+                    <p class="text-lg text-center text-gray-700 mb-4">${dayData.prompt}</p>
+                    <div class="bg-amber-50 p-4 rounded-lg border border-amber-200 mb-4">
+                        <p class="text-sm text-amber-700 text-center">輕鬆記錄，兩種方式任你選！</p>
+                        <ul class="list-none text-sm text-amber-800 space-y-2 mt-2">
+                            <li>1. 畫下來或寫在紙上： 拍張照片，直接點選下方上傳圖片。</li>
+                            <li>2. 直接打字： 在下方空格中，輸入你的心情或日記內容。</li>
+                        </ul>
+                    </div>
+                    ${isViewingOwnDiary ? '' : '<p class="bg-red-100 text-red-700 p-2 rounded-lg text-sm text-center mb-4">這份日記是唯讀的，你沒有權限修改。</p>'}
+                    <div id="image-preview" class="mb-4">
+                        ${entryImage ? `<img src="${entryImage}" class="w-full h-auto rounded-lg shadow-md mb-2 object-contain" alt="日記圖片預覽">` : ''}
+                    </div>
+                    <div class="mb-4 flex flex-col items-start space-y-2">
+                        <label for="image-upload" class="bg-amber-600 text-white font-bold py-2 px-4 rounded-lg cursor-pointer hover:bg-amber-700 transition duration-300 text-sm ${isViewingOwnDiary ? '' : 'hidden'}">
+                            上傳圖片
+                        </label>
+                        <input type="file" id="image-upload" accept="image/*" class="hidden">
+                    </div>
+                    <textarea id="diary-entry-${dayData.day}" class="w-full h-48 p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-amber-400 focus:border-amber-400 transition ${isViewingOwnDiary ? '' : 'bg-gray-100 cursor-not-allowed'}" placeholder="在這裡寫下你的小日記..." ${isViewingOwnDiary ? '' : 'readonly'}>${entryText}</textarea>
+                    <div class="mt-4 flex justify-end">
+                        <button id="save-btn" class="bg-amber-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-amber-700 transition duration-300 ${isViewingOwnDiary ? '' : 'hidden'}">儲存</button>
+                    </div>
+                `;
+                modal.classList.remove('hidden');
+
+                const imageUpload = document.getElementById('image-upload');
+                const imagePreviewDiv = document.getElementById('image-preview');
+                let uploadedImageBase64 = entryImage;
+
+                imageUpload.addEventListener('change', (event) => {
+                    const file = event.target.files[0];
+                    if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            uploadedImageBase64 = e.target.result;
+                            imagePreviewDiv.innerHTML = `<img src="${uploadedImageBase64}" class="w-full h-auto rounded-lg shadow-md mb-2 object-contain" alt="日記圖片預覽">`;
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                });
+
+                const textarea = document.getElementById(`diary-entry-${dayData.day}`);
+                textarea.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                    }
+                });
+
+                const saveBtn = document.getElementById('save-btn');
+                saveBtn.onclick = () => {
+                    textarea.blur();
+                    saveEntry(dayData.day, textarea.value, uploadedImageBase64);
+                    
+                    if (dayData.day !== 3) {
+                        closeModal();
+                    } else {
+                        closeModal();
+                    }
+                };
+            }
+
+            loadIdBtn.addEventListener('click', async () => {
+                const newSimpleId = loadIdInput.value.trim();
+                if (newSimpleId) {
+                    const newUid = await getUidFromSimpleId(newSimpleId);
+                    if (newUid) {
+                        initApp(newUid, newSimpleId);
+                        document.getElementById('switch-back-btn').classList.remove('hidden');
+                    } else {
+                        showToast("找不到該使用者 ID，請確認後再試。");
+                    }
+                } else {
+                    showToast("請輸入有效的使用者 ID。");
+                }
+            });
+
+            switchBackBtn.addEventListener('click', () => {
+                initApp(currentUserId, currentUserSimpleId);
+                document.getElementById('switch-back-btn').classList.add('hidden');
+            });
+
+            function closeModal() {
+                modal.classList.add('hidden');
+            }
+            
+            function closeCompletionModal() {
+                completionModal.classList.add('hidden');
+            }
+
+            closeModalBtn.addEventListener('click', closeModal);
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    closeModal();
+                }
+            });
+
+            completionModal.addEventListener('click', (e) => {
+                if (e.target === completionModal || e.target.tagName === 'A') {
+                    closeCompletionModal();
+                }
+            });
+        }
+    </script>
+
     <style>
         body {
             font-family: 'Noto Sans TC', sans-serif;
@@ -45,53 +468,84 @@
     </style>
 </head>
 <body class="antialiased">
-    <div class="container mx-auto px-4 py-8 md:py-12 max-w-5xl">
+    <div id="loading-message" class="fixed inset-0 bg-white bg-opacity-70 flex items-center justify-center z-50">
+        <div class="text-center p-4 rounded-lg">
+            <div class="animate-spin rounded-full h-12 w-12 border-4 border-amber-500 border-t-transparent mb-4"></div>
+            <p class="text-xl font-semibold text-amber-700">正在載入使用者 ID...</p>
+        </div>
+    </div>
+    <div id="main-content" class="container mx-auto px-4 py-8 md:py-12 max-w-5xl hidden">
         <header class="text-center mb-8">
             <h1 class="text-4xl md:text-5xl font-bold text-amber-800">3天親子互動小日記</h1>
             <p class="mt-2 text-lg text-amber-700">讓孩子每天練習，小日記超輕鬆。</p>
         </header>
 
-        <section id="progress-section" class="bg-amber-100 border border-amber-300 rounded-lg p-6 mb-10 shadow-sm">
-            <h2 class="text-2xl font-bold text-amber-900 mb-4">挑戰進度</h2>
-            <div class="flex flex-col md:flex-row items-center md:justify-between space-y-4 md:space-y-0 md:space-x-8">
-                <div class="flex-1 w-full">
-                    <div class="flex justify-between items-center mb-1">
-                        <span class="text-xl font-semibold text-amber-800">已完成天數</span>
-                        <span id="completed-days" class="text-2xl font-bold text-amber-800">0 / 3 天</span>
-                    </div>
-                    <div class="w-full bg-amber-200 rounded-full h-4 relative overflow-hidden">
-                        <div id="progress-bar" class="bg-amber-600 h-full rounded-full transition-all duration-500 ease-in-out" style="width: 0%;"></div>
-                    </div>
-                </div>
-                <div class="text-center md:text-right">
-                    <span id="progress-percentage" class="text-4xl font-extrabold text-amber-800">0%</span>
-                    <p class="text-sm text-amber-700 mt-1">挑戰進度</p>
-                </div>
-            </div>
+        <section id="user-info" class="bg-gray-100 border border-gray-300 rounded-lg p-4 mb-8 text-center text-sm text-gray-600 break-all">
+            <p id="user-id-display" class="font-bold">你的使用者 ID: 載入中...</p>
+            <p id="current-viewing-id" class="mt-4 font-semibold text-gray-700">目前正在檢視的 ID: 載入中...</p>
         </section>
 
-        <section id="instructions" class="bg-amber-50 border border-amber-200 rounded-lg p-6 mb-10 shadow-sm">
-            <h2 class="text-2xl font-bold mb-4 text-amber-900 flex items-center">
-                <span class="text-3xl mr-3">💡</span> 給爸媽的溫馨小提醒
-            </h2>
-            <div class="space-y-3 text-amber-800 text-base md:text-lg">
-                <p>這不僅是一份日記清單，更是一個開啟親子對話的魔法工具。我們將靜態的學習單設計成一個充滿驚喜的互動網頁，讓孩子每天都能「翻」開一個新問題，像玩遊戲一樣，輕鬆愉快地養成記錄生活的好習慣。</p>
-                <div id="expandable-content" class="max-h-0 overflow-hidden transition-all duration-500 ease-in-out">
-                    <ul class="list-disc list-inside pl-2 space-y-2 mt-4">
-                        <li>挑一個輕鬆時刻： 每天晚餐後或睡前，找個舒適的角落，和孩子一起聊聊今天。</li>
-                        <li>不要求字數： 孩子寫多寫少都沒關係，重點是讓他們享受分享的過程。</li>
-                        <li>鼓勵重於要求： 寫出來的每一個字都值得被肯定，讓孩子覺得寫日記是件開心的事。</li>
-                    </ul>
-                    <p class="pt-4">點擊下方的數字卡片，開始今天的日記冒險吧！內容與圖片會自動儲存在您的瀏覽器中。</p>
-                </div>
-                <button id="toggle-instructions" class="mt-4 text-amber-600 hover:text-amber-800 font-semibold flex items-center">
-                    閱讀更多 ▼
-                </button>
-            </div>
+        <section id="admin-section" class="bg-rose-50 border border-rose-200 rounded-lg p-6 mb-10 shadow-sm hidden">
+            <h2 class="text-2xl font-bold text-rose-900 mb-4">管理者模式：檢視所有使用者日記</h2>
+            <ul id="users-list" class="space-y-4 max-h-64 overflow-y-auto">
+                <p class="text-center text-gray-500">正在載入所有使用者...</p>
+            </ul>
+            <p class="mt-4 text-rose-800 text-sm">點擊任一 ID 即可查看該使用者的日記進度。</p>
         </section>
 
-        <main id="diary-grid" class="flex flex-wrap justify-center gap-8">
-        </main>
+        <section id="user-diary-view" class="hidden">
+            <section id="progress-section" class="bg-amber-100 border border-amber-300 rounded-lg p-6 mb-10 shadow-sm">
+                <h2 class="text-2xl font-bold text-amber-900 mb-4">挑戰進度</h2>
+                <div class="flex flex-col md:flex-row items-center md:justify-between space-y-4 md:space-y-0 md:space-x-8">
+                    <div class="flex-1 w-full">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-xl font-semibold text-amber-800">已完成天數</span>
+                            <span id="completed-days" class="text-2xl font-bold text-amber-800">0 / 3 天</span>
+                        </div>
+                        <div class="w-full bg-amber-200 rounded-full h-4 relative overflow-hidden">
+                            <div id="progress-bar" class="bg-amber-600 h-full rounded-full transition-all duration-500 ease-in-out" style="width: 0%;"></div>
+                        </div>
+                    </div>
+                    <div class="text-center md:text-right">
+                        <span id="progress-percentage" class="text-4xl font-extrabold text-amber-800">0%</span>
+                        <p class="text-sm text-amber-700 mt-1">挑戰進度</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="instructions" class="bg-amber-50 border border-amber-200 rounded-lg p-6 mb-10 shadow-sm">
+                <h2 class="text-2xl font-bold mb-4 text-amber-900 flex items-center">
+                    <span class="text-3xl mr-3">💡</span> 給爸媽的溫馨小提醒
+                </h2>
+                <div class="space-y-3 text-amber-800 text-base md:text-lg">
+                    <p>這不僅是一份日記清單，更是一個開啟親子對話的魔法工具。我們將靜態的學習單設計成一個充滿驚喜的互動網頁，讓孩子每天都能「翻」開一個新問題，像玩遊戲一樣，輕鬆愉快地養成記錄生活的好習慣。</p>
+                    <div id="expandable-content" class="max-h-0 overflow-hidden transition-all duration-500 ease-in-out">
+                        <ul class="list-disc list-inside pl-2 space-y-2 mt-4">
+                            <li>挑一個輕鬆時刻： 每天晚餐後或睡前，找個舒適的角落，和孩子一起聊聊今天。</li>
+                            <li>不要求字數： 孩子寫多寫少都沒關係，重點是讓他們享受分享的過程。</li>
+                            <li>鼓勵重於要求： 寫出來的每一個字都值得被肯定，讓孩子覺得寫日記是件開心的事。</li>
+                        </ul>
+                        <p class="pt-4">點擊下方的數字卡片，開始今天的日記冒險吧！內容與圖片會自動儲存在您的瀏覽器中。</p>
+                    </div>
+                    <button id="toggle-instructions" class="mt-4 text-amber-600 hover:text-amber-800 font-semibold flex items-center">
+                        閱讀更多 ▼
+                    </button>
+                </div>
+            </section>
+
+            <main id="diary-grid" class="flex flex-wrap justify-center gap-8 mb-10">
+            </main>
+
+            <section id="share-view" class="bg-stone-50 border border-stone-200 rounded-lg p-6 mb-10 shadow-sm hidden">
+                <h2 class="text-2xl font-bold text-stone-800 mb-4">與他人分享或查看日記</h2>
+                <p class="text-stone-700 mb-4">你可以將自己的 ID 分享給他人，或輸入他人的 ID 來查看他們的小日記。</p>
+                <div class="flex flex-col md:flex-row gap-4 items-stretch md:items-center">
+                    <input type="text" id="load-id-input" placeholder="請在這裡貼上或輸入其他人的 ID..." class="flex-1 p-3 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-400 transition">
+                    <button id="load-id-btn" class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300 w-full md:w-auto">載入日記</button>
+                </div>
+                <button id="switch-back-btn" class="mt-4 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300 w-full hidden">切換回我的日記</button>
+            </section>
+        </section>
 
         <!-- General Modal for Diary Entry -->
         <div id="modal" class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center p-4 hidden z-50">
@@ -121,220 +575,5 @@
         <div id="toast" class="fixed bottom-8 left-1/2 -translate-x-1/2 bg-amber-600 text-white text-center py-3 px-6 rounded-lg shadow-lg opacity-0 transition-opacity duration-300 z-50">
         </div>
     </div>
-
-    <script>
-        const diaryData = [
-            { day: 1, theme: '從日常開始', prompt: '今天讓你最開心的事情是什麼？' },
-            { day: 2, theme: '從日常開始', prompt: '今天的午餐最好吃的是哪一道？為什麼？' },
-            { day: 3, theme: '從日常開始', prompt: '今天在學校發生一件有趣的小事？' }
-        ];
-        
-        const encouragingWords = [
-            "太棒了！今天也完成了挑戰！",
-            "你真棒！又離目標更近一步了！",
-            "日記寫得真好，為你拍拍手！",
-            "哇！你每天都在進步呢！",
-            "繼續加油，期待你明天的日記！"
-        ];
-        
-        const diaryGrid = document.getElementById('diary-grid');
-        const modal = document.getElementById('modal');
-        const completionModal = document.getElementById('completion-modal');
-        const modalContent = document.getElementById('modal-content');
-        const closeModalBtn = document.getElementById('close-modal');
-        const completedDaysEl = document.getElementById('completed-days');
-        const progressPercentageEl = document.getElementById('progress-percentage');
-        const progressBarEl = document.getElementById('progress-bar');
-        const toast = document.getElementById('toast');
-        const expandableContent = document.getElementById('expandable-content');
-        const toggleBtn = document.getElementById('toggle-instructions');
-
-        function showToast(message) {
-            toast.textContent = message;
-            toast.classList.add('opacity-100');
-            setTimeout(() => {
-                toast.classList.remove('opacity-100');
-            }, 3000);
-        }
-
-        function loadEntries() {
-            const entries = JSON.parse(localStorage.getItem('diaryEntries') || '{}');
-            return entries;
-        }
-
-        function saveEntry(day, content, image) {
-            const entries = loadEntries();
-            entries[day] = { text: content, image: image };
-            localStorage.setItem('diaryEntries', JSON.stringify(entries));
-            
-            if (content.trim() !== '' || image) {
-                if (day === 3) {
-                    closeModal(); // Close the regular modal first
-                    completionModal.classList.remove('hidden');
-                } else {
-                    const randomMessage = encouragingWords[Math.floor(Math.random() * encouragingWords.length)];
-                    showToast(randomMessage);
-                }
-            }
-        }
-        
-        function openModal(dayData) {
-            const entries = loadEntries();
-            const entry = entries[dayData.day] || {};
-            const entryText = entry.text || '';
-            const entryImage = entry.image || '';
-
-            modalContent.innerHTML = `
-                <div class="text-center mb-4">
-                    <span class="text-sm bg-amber-100 text-amber-800 px-3 py-1 rounded-full">${dayData.theme}</span>
-                    <h3 class="text-2xl font-bold mt-2 text-amber-900">第 ${dayData.day} 天</h3>
-                </div>
-                <p class="text-lg text-center text-gray-700 mb-4">${dayData.prompt}</p>
-                <div class="bg-amber-50 p-4 rounded-lg border border-amber-200 mb-4">
-                    <p class="text-sm text-amber-700 text-center">輕鬆記錄，兩種方式任你選！</p>
-                    <ul class="list-none text-sm text-amber-800 space-y-2 mt-2">
-                        <li>1. 畫下來或寫在紙上： 拍張照片，直接點選下方上傳圖片。</li>
-                        <li>2. 直接打字： 在下方空格中，輸入你的心情或日記內容。</li>
-                    </ul>
-                </div>
-                <div id="image-preview" class="mb-4">
-                    ${entryImage ? `<img src="${entryImage}" class="w-full h-auto rounded-lg shadow-md mb-2 object-contain" alt="日記圖片預覽">` : ''}
-                </div>
-                <div class="mb-4 flex flex-col items-start space-y-2">
-                    <label for="image-upload" class="bg-amber-600 text-white font-bold py-2 px-4 rounded-lg cursor-pointer hover:bg-amber-700 transition duration-300 text-sm">
-                        上傳圖片
-                    </label>
-                    <input type="file" id="image-upload" accept="image/*" class="hidden">
-                </div>
-                <textarea id="diary-entry-${dayData.day}" class="w-full h-48 p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-amber-400 focus:border-amber-400 transition" placeholder="在這裡寫下你的小日記...">${entryText}</textarea>
-                <div class="mt-4 flex justify-end">
-                    <button id="save-btn" class="bg-amber-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-amber-700 transition duration-300">儲存</button>
-                </div>
-            `;
-            modal.classList.remove('hidden');
-
-            const imageUpload = document.getElementById('image-upload');
-            const imagePreviewDiv = document.getElementById('image-preview');
-            let uploadedImageBase64 = entryImage;
-
-            imageUpload.addEventListener('change', (event) => {
-                const file = event.target.files[0];
-                if (file) {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        uploadedImageBase64 = e.target.result;
-                        imagePreviewDiv.innerHTML = `<img src="${uploadedImageBase64}" class="w-full h-auto rounded-lg shadow-md mb-2 object-contain" alt="日記圖片預覽">`;
-                    };
-                    reader.readAsDataURL(file);
-                }
-            });
-
-            const textarea = document.getElementById(`diary-entry-${dayData.day}`);
-            textarea.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' && !e.shiftKey) { // Prevents saving on simple Enter, allows for multiline with Shift+Enter
-                    e.preventDefault();
-                }
-            });
-
-            const saveBtn = document.getElementById('save-btn');
-            saveBtn.onclick = () => {
-                saveEntry(dayData.day, textarea.value, uploadedImageBase64);
-                
-                // Only close the modal and re-render if it's not Day 3
-                if (dayData.day !== 3) {
-                  closeModal();
-                  renderGrid();
-                  updateProgressDisplay();
-                  const nextDayCard = document.querySelector(`[data-day="${dayData.day + 1}"]`);
-                  if (nextDayCard) {
-                      nextDayCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                  }
-                } else {
-                  // For Day 3, saving triggers the completion modal, so we close it here and let the other modal show up.
-                  closeModal();
-                  renderGrid();
-                  updateProgressDisplay();
-                }
-            };
-        }
-
-        function closeModal() {
-            modal.classList.add('hidden');
-        }
-        
-        function closeCompletionModal() {
-            completionModal.classList.add('hidden');
-        }
-
-        function updateProgressDisplay() {
-            const entries = loadEntries();
-            const completedCount = Object.values(entries).filter(entry => entry.text.trim() !== '' || entry.image).length;
-            const totalDays = diaryData.length;
-            const percentage = totalDays > 0 ? Math.round((completedCount / totalDays) * 100) : 0;
-
-            completedDaysEl.textContent = `${completedCount} / ${totalDays} 天`;
-            progressPercentageEl.textContent = `${percentage}%`;
-            progressBarEl.style.width = `${percentage}%`;
-        }
-
-        function renderGrid() {
-            const entries = loadEntries();
-            diaryGrid.innerHTML = '';
-            diaryData.forEach(item => {
-                const entry = entries[item.day] || {};
-                const hasContent = (entry.text && entry.text.trim() !== '') || entry.image;
-                const hasImage = entry.image;
-
-                const card = document.createElement('div');
-                card.className = `h-28 md:h-32 w-28 md:w-32 rounded-lg cursor-pointer flex-shrink-0 flex justify-center items-center shadow-md transition-transform transform hover:scale-105 relative ${hasContent ? 'completed' : ''} ${hasImage ? 'has-image' : ''}`;
-                card.dataset.day = item.day; // Add data-day attribute for easy selection
-                card.innerHTML = `
-                    <div class="card-front w-full h-full bg-amber-100 border-2 border-amber-200 text-amber-800 flex flex-col justify-center items-center rounded-lg p-2">
-                        <span class="text-xs">第</span>
-                        <span class="text-4xl font-bold">${item.day}</span>
-                        <span class="text-xs">天</span>
-                    </div>
-                `;
-                if (hasImage) {
-                    const imageIcon = document.createElement('div');
-                    imageIcon.className = `absolute top-2 right-2 text-xl`;
-                    imageIcon.innerHTML = '🖼️';
-                    card.querySelector('.card-front').appendChild(imageIcon);
-                }
-                card.addEventListener('click', () => openModal(item));
-                diaryGrid.appendChild(card);
-            });
-        }
-        
-        closeModalBtn.addEventListener('click', closeModal);
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                closeModal();
-            }
-        });
-
-        // Add event listener to close the completion modal
-        completionModal.addEventListener('click', (e) => {
-            if (e.target === completionModal || e.target.tagName === 'A') {
-                closeCompletionModal();
-            }
-        });
-
-        toggleBtn.addEventListener('click', () => {
-            const isExpanded = expandableContent.classList.contains('max-h-screen');
-            if (isExpanded) {
-                expandableContent.classList.remove('max-h-screen');
-                toggleBtn.textContent = '閱讀更多 ▼';
-            } else {
-                expandableContent.classList.add('max-h-screen');
-                toggleBtn.textContent = '收起 ▲';
-            }
-        });
-
-        document.addEventListener('DOMContentLoaded', () => {
-            renderGrid();
-            updateProgressDisplay();
-        });
-    </script>
 </body>
 </html>
