@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3天親子互動小日記</title>
+    <title>3天親子互動小日記 - 管理者版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -36,6 +36,25 @@
         let unsubscribe = null;
         let isAdmin = false;
         let isInitialized = false;
+
+        // --- Load Timeout Mechanism ---
+        let loadTimeout = null;
+        const LOADING_TIMEOUT_MS = 10000; // 10 seconds
+
+        function startLoadTimeout() {
+            if (loadTimeout) clearTimeout(loadTimeout);
+            loadTimeout = setTimeout(() => {
+                updateUIState('error', '載入超時，請檢查網路連線或稍後再試。');
+            }, LOADING_TIMEOUT_MS);
+        }
+
+        function clearLoadTimeout() {
+            if (loadTimeout) {
+                clearTimeout(loadTimeout);
+                loadTimeout = null;
+            }
+        }
+        // --- End Timeout Mechanism ---
 
         async function createOrGetSimpleId(uid) {
             if (!auth.currentUser) {
@@ -73,63 +92,84 @@
             return null;
         }
         
-        function updateUIState(state) {
+        function updateUIState(state, message = '') {
             const userIdDisplay = document.getElementById('user-id-display');
             const currentViewingIdEl = document.getElementById('current-viewing-id');
             const mainContent = document.getElementById('main-content');
             const loadingMessage = document.getElementById('loading-message');
+            const errorMessageEl = document.getElementById('error-message');
+            const reloadBtn = document.getElementById('reload-btn');
+
+            loadingMessage.classList.add('hidden');
+            mainContent.classList.add('hidden');
+            errorMessageEl.classList.add('hidden');
+            reloadBtn.classList.add('hidden');
 
             if (state === 'loading') {
-                userIdDisplay.textContent = `載入中...`;
                 loadingMessage.classList.remove('hidden');
-                mainContent.classList.add('hidden');
             } else if (state === 'loaded') {
                 userIdDisplay.textContent = `你的使用者 ID: ${currentUserSimpleId} ${isAdmin ? '(管理者)' : ''}`;
                 currentViewingIdEl.textContent = `目前正在檢視的 ID: ${currentUserSimpleId}`;
-                loadingMessage.classList.add('hidden');
                 mainContent.classList.remove('hidden');
             } else if (state === 'error') {
-                userIdDisplay.textContent = `載入失敗，請稍後再試。`;
-                loadingMessage.classList.add('hidden');
-                mainContent.classList.add('hidden');
+                userIdDisplay.textContent = `載入失敗！`;
+                errorMessageEl.textContent = message;
+                errorMessageEl.classList.remove('hidden');
+                reloadBtn.classList.remove('hidden');
             }
         }
 
-        // Authenticate the user and set up the main logic
-        onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                currentUserId = user.uid;
-                try {
-                    currentUserSimpleId = await createOrGetSimpleId(currentUserId);
-                    isAdmin = (currentUserSimpleId === ADMIN_ID);
+        // Main initialization function
+        async function initializeAppLogic() {
+            if (isInitialized) return;
+            isInitialized = true;
+            
+            updateUIState('loading');
+            startLoadTimeout();
 
-                    if (isAdmin) {
-                        document.getElementById('admin-section').classList.remove('hidden');
-                        document.getElementById('share-view').classList.add('hidden');
-                        document.getElementById('user-diary-view').classList.add('hidden');
-                        loadAllUsers();
-                    } else {
-                        document.getElementById('admin-section').classList.add('hidden');
-                        document.getElementById('share-view').classList.remove('hidden');
-                        document.getElementById('user-diary-view').classList.remove('hidden');
-                        initApp(currentUserId, currentUserSimpleId);
-                    }
-                    updateUIState('loaded');
-                } catch (e) {
-                console.error("Initialization failed:", e);
-                    updateUIState('error');
-                }
-            } else {
-                // User is not signed in, so we sign them in here
-                try {
+            try {
+                // If not already authenticated, sign in
+                if (!auth.currentUser) {
                     if (initialAuthToken) {
                         await signInWithCustomToken(auth, initialAuthToken);
                     } else {
                         await signInAnonymously(auth);
                     }
-                } catch (error) {
-                    console.error("Authentication failed:", error);
-                    updateUIState('error');
+                }
+                
+                currentUserId = auth.currentUser.uid;
+                currentUserSimpleId = await createOrGetSimpleId(currentUserId);
+                isAdmin = (currentUserSimpleId === ADMIN_ID);
+                clearLoadTimeout();
+
+                if (isAdmin) {
+                    document.getElementById('admin-section').classList.remove('hidden');
+                    document.getElementById('share-view').classList.add('hidden');
+                    document.getElementById('user-diary-view').classList.add('hidden');
+                    loadAllUsers();
+                } else {
+                    document.getElementById('admin-section').classList.add('hidden');
+                    document.getElementById('share-view').classList.remove('hidden');
+                    document.getElementById('user-diary-view').classList.remove('hidden');
+                    initDiaryUI(currentUserId, currentUserSimpleId);
+                }
+                updateUIState('loaded');
+
+            } catch (e) {
+                clearLoadTimeout();
+                console.error("Initialization failed:", e);
+                updateUIState('error', '載入使用者資料失敗，請重試。');
+            }
+        }
+
+        // Listen for auth state changes
+        onAuthStateChanged(auth, async (user) => {
+            if (user && !isInitialized) {
+                initializeAppLogic();
+            } else if (!user) {
+                // User is not signed in, sign them in anonymously
+                if (!isInitialized) {
+                     initializeAppLogic();
                 }
             }
         });
@@ -149,7 +189,7 @@
                 }
             });
         }
-
+        
         async function loadAllUsers() {
             if (!auth.currentUser) {
                 console.error("Firestore operation denied: User not authenticated.");
@@ -175,7 +215,7 @@
                     userItem.textContent = `使用者 ID: ${userSimpleId}`;
                     userItem.addEventListener('click', async () => {
                         const uid = doc.id; // Use the Firebase UID as the document ID
-                        initApp(uid, userSimpleId);
+                        initDiaryUI(uid, userSimpleId);
                         document.getElementById('switch-back-btn').classList.remove('hidden');
                     });
                     usersList.appendChild(userItem);
@@ -183,7 +223,7 @@
             }
         }
 
-        function initApp(userIdToLoad, simpleIdToDisplay) {
+        function initDiaryUI(userIdToLoad, simpleIdToDisplay) {
             console.log(`Loading diary for user ID: ${userIdToLoad}`);
 
             const diaryData = [
@@ -397,7 +437,7 @@
                 if (newSimpleId) {
                     const newUid = await getUidFromSimpleId(newSimpleId);
                     if (newUid) {
-                        initApp(newUid, newSimpleId);
+                        initDiaryUI(newUid, newSimpleId);
                         document.getElementById('switch-back-btn').classList.remove('hidden');
                     } else {
                         showToast("找不到該使用者 ID，請確認後再試。");
@@ -408,7 +448,7 @@
             });
 
             switchBackBtn.addEventListener('click', () => {
-                initApp(currentUserId, currentUserSimpleId);
+                initDiaryUI(currentUserId, currentUserSimpleId);
                 document.getElementById('switch-back-btn').classList.add('hidden');
             });
 
@@ -484,6 +524,8 @@
         <section id="user-info" class="bg-gray-100 border border-gray-300 rounded-lg p-4 mb-8 text-center text-sm text-gray-600 break-all">
             <p id="user-id-display" class="font-bold">你的使用者 ID: 載入中...</p>
             <p id="current-viewing-id" class="mt-4 font-semibold text-gray-700">目前正在檢視的 ID: 載入中...</p>
+            <p id="error-message" class="text-red-600 font-bold mt-2 hidden"></p>
+            <button id="reload-btn" class="mt-4 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300 hidden">重新載入</button>
         </section>
 
         <section id="admin-section" class="bg-rose-50 border border-rose-200 rounded-lg p-6 mb-10 shadow-sm hidden">
