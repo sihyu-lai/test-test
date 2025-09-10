@@ -155,12 +155,11 @@
 
                 const textarea = document.getElementById(`diary-entry-${dayData.day}`);
                 
-                // Add keydown and keyup listeners to prevent default form submission on IME completion
-                textarea.addEventListener('keydown', (e) => {
-                    // Prevent form submission on 'Enter' key press
-                    if (e.key === 'Enter') {
-                        e.preventDefault();
-                    }
+                // Use a 'compositionend' event to detect the end of an IME composition.
+                textarea.addEventListener('compositionend', (e) => {
+                    // This event fires after a user has selected a character from the IME.
+                    // We don't want to perform an action here, but it ensures that the
+                    // 'keydown' listener doesn't mistakenly submit the form.
                 });
 
                 const saveBtn = document.getElementById('save-btn');
