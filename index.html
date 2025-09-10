@@ -8,81 +8,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
-    <!-- Firebase Imports -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, onSnapshot, setDoc, setLogLevel, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // Global variables for Firebase
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-        
-        let currentUserId = null;
-        let unsubscribe = null;
-
-        // Make Firebase services globally accessible
-        let app = null;
-        let auth = null;
-        let db = null;
-
-        initializeAppLogic();
-        
-        function updateUIState(state, message = '') {
-            const loadingContainer = document.getElementById('loading-container');
-            const mainContent = document.getElementById('main-content');
-            const errorContainer = document.getElementById('error-container');
-
-            loadingContainer.classList.add('hidden');
-            mainContent.classList.add('hidden');
-            errorContainer.classList.add('hidden');
-
-            if (state === 'loading') {
-                loadingContainer.classList.remove('hidden');
-            } else if (state === 'loaded') {
-                mainContent.classList.remove('hidden');
-            } else if (state === 'error') {
-                document.getElementById('error-message').textContent = message;
-                errorContainer.classList.remove('hidden');
-            }
-        }
-
-        async function initializeAppLogic() {
-            updateUIState('loading');
-            try {
-                if (!app) {
-                    app = initializeApp(firebaseConfig);
-                    auth = getAuth(app);
-                    db = getFirestore(app);
-                    setLogLevel('Debug');
-                }
-                
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
-                
-                const user = auth.currentUser;
-                if (!user) {
-                    throw new Error("User authentication failed.");
-                }
-                
-                currentUserId = user.uid;
-                
-                initDiaryUI(currentUserId);
-                
-                updateUIState('loaded');
-
-            } catch (e) {
-                console.error("Initialization failed:", e);
-                updateUIState('error', '載入使用者資料失敗，請重試。');
-            }
-        }
-        
-        function initDiaryUI(userId) {
-            console.log(`Loading diary for user ID: ${userId}`);
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const DIARY_KEY = 'interactive_diary_entries';
 
             const diaryData = [
                 { day: 1, theme: '從日常開始', prompt: '今天讓你最開心的事情是什麼？' },
@@ -97,7 +25,7 @@
                 "哇！你每天都在進步呢！",
                 "繼續加油，期待你明天的日記！"
             ];
-            
+
             const diaryGrid = document.getElementById('diary-grid');
             const modal = document.getElementById('modal');
             const completionModal = document.getElementById('completion-modal');
@@ -109,7 +37,9 @@
             const toast = document.getElementById('toast');
             const toggleInstructionsBtn = document.getElementById('toggle-instructions');
             const expandableContent = document.getElementById('expandable-content');
-            
+
+            let entries = JSON.parse(localStorage.getItem(DIARY_KEY)) || {};
+
             function showToast(message) {
                 toast.textContent = message;
                 toast.classList.add('opacity-100');
@@ -117,57 +47,23 @@
                     toast.classList.remove('opacity-100');
                 }, 3000);
             }
-            
-            async function saveEntry(day, content, image) {
-                if (!auth.currentUser) {
-                    showToast("身份驗證失敗，請重試。");
-                    return;
-                }
-                
-                const diaryRef = doc(db, `artifacts/${appId}/public/data/diaries_v2`, userId);
-                let entriesToSave = { ...entries };
-                entriesToSave[day] = { text: content, image: image, timestamp: Date.now() };
 
-                try {
-                    await setDoc(diaryRef, entriesToSave);
-                    console.log(`Entry for day ${day} saved successfully.`);
+            function saveEntry(day, content, image) {
+                entries[day] = { text: content, image: image, timestamp: Date.now() };
+                localStorage.setItem(DIARY_KEY, JSON.stringify(entries));
+                renderGrid();
+                updateProgressDisplay();
 
-                    if (content.trim() !== '' || image) {
-                        if (day === 3) {
-                            closeModal();
-                            completionModal.classList.remove('hidden');
-                        } else {
-                            const randomMessage = encouragingWords[Math.floor(Math.random() * encouragingWords.length)];
-                            showToast(randomMessage);
-                        }
+                if (content.trim() !== '' || image) {
+                    if (day === 3) {
+                        closeModal();
+                        completionModal.classList.remove('hidden');
+                    } else {
+                        const randomMessage = encouragingWords[Math.floor(Math.random() * encouragingWords.length)];
+                        showToast(randomMessage);
                     }
-                } catch (e) {
-                    console.error("Error saving document: ", e);
                 }
             }
-
-            if (unsubscribe) {
-                unsubscribe();
-            }
-
-            const diaryRef = doc(db, `artifacts/${appId}/public/data/diaries_v2`, userId);
-            let entries = {};
-
-            unsubscribe = onSnapshot(diaryRef, (snapshot) => {
-                if (snapshot.exists()) {
-                    entries = snapshot.data() || {};
-                    renderGrid();
-                    updateProgressDisplay();
-                    console.log("Entries updated from Firestore.");
-                } else {
-                    console.log("No diary data found. Initializing new entries.");
-                    entries = {};
-                    renderGrid();
-                    updateProgressDisplay();
-                }
-            }, (error) => {
-                console.error("Error listening to Firestore:", error);
-            });
 
             function updateProgressDisplay() {
                 const completedCount = Object.values(entries).filter(entry => entry.text && entry.text.trim() !== '' || entry.image).length;
@@ -302,7 +198,17 @@
                 const isCollapsed = expandableContent.classList.toggle('max-h-0');
                 toggleInstructionsBtn.textContent = isCollapsed ? '閱讀更多 ▼' : '收合 ▲';
             });
-        }
+
+            // Initial render
+            renderGrid();
+            updateProgressDisplay();
+
+            // Hide loading spinner and show content
+            const loadingContainer = document.getElementById('loading-container');
+            const mainContent = document.getElementById('main-content');
+            loadingContainer.classList.add('hidden');
+            mainContent.classList.remove('hidden');
+        });
     </script>
     <style>
         body {
@@ -360,7 +266,7 @@
         <div class="text-center p-8 bg-red-50 border-2 border-red-200 rounded-lg shadow-md">
             <h2 class="text-3xl font-bold text-red-700 mb-4">載入失敗</h2>
             <p id="error-message" class="text-lg text-red-600 mb-6">發生了意料之外的錯誤，請再試一次。</p>
-            <button onclick="initializeAppLogic()" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300">重新載入</button>
+            <button onclick="window.location.reload()" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300">重新載入</button>
         </div>
     </div>
     
