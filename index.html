@@ -120,7 +120,7 @@
                     return;
                 }
                 
-                const diaryRef = doc(db, `artifacts/${appId}/public/data/diaries`, userId);
+                const diaryRef = doc(db, `artifacts/${appId}/public/data/diaries_v2`, userId);
                 let entriesToSave = { ...entries };
                 entriesToSave[day] = { text: content, image: image, timestamp: Date.now() };
 
@@ -146,7 +146,7 @@
                 unsubscribe();
             }
 
-            const diaryRef = doc(db, `artifacts/${appId}/public/data/diaries`, userId);
+            const diaryRef = doc(db, `artifacts/${appId}/public/data/diaries_v2`, userId);
             let entries = {};
 
             unsubscribe = onSnapshot(diaryRef, (snapshot) => {
