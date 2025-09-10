@@ -48,7 +48,7 @@
                 if (userSnap.exists() && userSnap.data().simpleId) {
                     return userSnap.data().simpleId;
                 } else {
-                    const newSimpleId = Math.random().toString(36).substring(2, 8); // A short, random alphanumeric string
+                    const newSimpleId = uid.substring(0, 6);
                     await setDoc(userRef, { simpleId: newSimpleId, uid: uid }, { merge: true });
                     return newSimpleId;
                 }
@@ -80,7 +80,7 @@
             const loadingMessage = document.getElementById('loading-message');
 
             if (state === 'loading') {
-                userIdDisplay.textContent = `正在載入使用者 ID...`;
+                userIdDisplay.textContent = `載入中...`;
                 loadingMessage.classList.remove('hidden');
                 mainContent.classList.add('hidden');
             } else if (state === 'loaded') {
