@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3天親子互動小日記 - 管理者版</title>
+    <title>3天親子互動小日記</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -11,7 +11,7 @@
     <!-- Firebase Imports -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, onSnapshot, setDoc, setLogLevel, collection, getDocs, query, where, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Global variables for Firebase
@@ -19,14 +19,9 @@
         const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         
-        // This is a special, hard-coded Admin ID for demonstration.
-        // In a real application, you would use a more robust authentication system.
-        const ADMIN_ID = "admin-Shopping";
-
         let currentUserId = null;
         let currentUserSimpleId = null;
         let unsubscribe = null;
-        let isAdmin = false;
 
         // Make Firebase services globally accessible
         let app = null;
@@ -85,7 +80,7 @@
             if (state === 'loading') {
                 loadingContainer.classList.remove('hidden');
             } else if (state === 'loaded') {
-                document.getElementById('user-id-display').textContent = `你的使用者 ID: ${currentUserSimpleId} ${isAdmin ? '(管理者)' : ''}`;
+                document.getElementById('user-id-display').textContent = `你的使用者 ID: ${currentUserSimpleId}`;
                 document.getElementById('current-viewing-id').textContent = `目前正在檢視的 ID: ${currentUserSimpleId}`;
                 mainContent.classList.remove('hidden');
             } else if (state === 'error') {
@@ -104,7 +99,7 @@
                 auth = getAuth(app);
                 db = getFirestore(app);
                 setLogLevel('Debug');
-
+                
                 // Sign in the user first
                 if (initialAuthToken) {
                     await signInWithCustomToken(auth, initialAuthToken);
@@ -114,26 +109,15 @@
                 
                 // Then, get the user info and proceed
                 const user = auth.currentUser;
-                if (user) {
-                    currentUserId = user.uid;
-                    currentUserSimpleId = await createOrGetSimpleId(currentUserId);
-                    isAdmin = (currentUserSimpleId === ADMIN_ID);
-
-                    if (isAdmin) {
-                        document.getElementById('admin-section').classList.remove('hidden');
-                        document.getElementById('share-view').classList.add('hidden');
-                        document.getElementById('user-diary-view').classList.add('hidden');
-                        loadAllUsers();
-                    } else {
-                        document.getElementById('admin-section').classList.add('hidden');
-                        document.getElementById('share-view').classList.remove('hidden');
-                        document.getElementById('user-diary-view').classList.remove('hidden');
-                        initDiaryUI(currentUserId, currentUserSimpleId);
-                    }
-                    updateUIState('loaded');
-                } else {
-                    throw new Error("User authentication failed.");
-                }
+                if (!user) throw new Error("User authentication failed.");
+                
+                currentUserId = user.uid;
+                currentUserSimpleId = await createOrGetSimpleId(currentUserId);
+                
+                // Direct call to initDiaryUI, no admin check needed
+                initDiaryUI(currentUserId, currentUserSimpleId);
+                
+                updateUIState('loaded');
 
             } catch (e) {
                 console.error("Initialization failed:", e);
@@ -141,39 +125,6 @@
             }
         }
         
-        async function loadAllUsers() {
-            if (!auth.currentUser) {
-                console.error("Firestore operation denied: User not authenticated.");
-                return;
-            }
-            console.log("Admin mode: Loading all user diaries.");
-            const usersList = document.getElementById('users-list');
-            usersList.innerHTML = `<p class="text-center text-gray-500">正在載入所有使用者...</p>`;
-
-            const usersRef = collection(db, `artifacts/${appId}/public/data/user_profiles`);
-            
-            const querySnapshot = await getDocs(usersRef);
-            
-            usersList.innerHTML = ''; // Clear loading message
-
-            if (querySnapshot.empty) {
-                usersList.innerHTML = `<p class="text-center text-gray-500">目前沒有任何日記。</p>`;
-            } else {
-                querySnapshot.forEach(doc => {
-                    const userSimpleId = doc.data().simpleId;
-                    const userItem = document.createElement('li');
-                    userItem.className = "p-3 border rounded-lg hover:bg-stone-100 cursor-pointer transition text-center break-all";
-                    userItem.textContent = `使用者 ID: ${userSimpleId}`;
-                    userItem.addEventListener('click', async () => {
-                        const uid = doc.id; // Use the Firebase UID as the document ID
-                        initDiaryUI(uid, userSimpleId);
-                        document.getElementById('switch-back-btn').classList.remove('hidden');
-                    });
-                    usersList.appendChild(userItem);
-                });
-            }
-        }
-
         function initDiaryUI(userIdToLoad, simpleIdToDisplay) {
             console.log(`Loading diary for user ID: ${userIdToLoad}`);
 
@@ -203,10 +154,11 @@
             const loadIdInput = document.getElementById('load-id-input');
             const loadIdBtn = document.getElementById('load-id-btn');
             const switchBackBtn = document.getElementById('switch-back-btn');
+            const toggleInstructionsBtn = document.getElementById('toggle-instructions');
+            const expandableContent = document.getElementById('expandable-content');
 
             document.getElementById('share-view').classList.remove('hidden');
             document.getElementById('user-diary-view').classList.remove('hidden');
-            document.getElementById('admin-section').classList.add('hidden');
             document.getElementById('current-viewing-id').textContent = `目前正在檢視的 ID: ${simpleIdToDisplay}`;
 
             function showToast(message) {
@@ -422,6 +374,12 @@
                     closeCompletionModal();
                 }
             });
+
+            // FIXED: Add event listener for the toggle button
+            toggleInstructionsBtn.addEventListener('click', () => {
+                const isCollapsed = expandableContent.classList.toggle('max-h-0');
+                toggleInstructionsBtn.textContent = isCollapsed ? '閱讀更多 ▼' : '收合 ▲';
+            });
         }
     </script>
     <style>
@@ -488,15 +446,7 @@
             <button id="reload-btn" class="mt-4 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300 hidden">重新載入</button>
         </section>
 
-        <section id="admin-section" class="bg-rose-50 border border-rose-200 rounded-lg p-6 mb-10 shadow-sm hidden">
-            <h2 class="text-2xl font-bold text-rose-900 mb-4">管理者模式：檢視所有使用者日記</h2>
-            <p class="mb-4 text-rose-800 text-sm">身為管理者，你可以直接點擊任何一個使用者 ID 來查看他們的日記。</p>
-            <ul id="users-list" class="space-y-4 max-h-64 overflow-y-auto">
-                <p class="text-center text-gray-500">正在載入所有使用者...</p>
-            </ul>
-        </section>
-
-        <section id="user-diary-view" class="hidden">
+        <section id="user-diary-view">
             <section id="progress-section" class="bg-amber-100 border border-amber-300 rounded-lg p-6 mb-10 shadow-sm">
                 <h2 class="text-2xl font-bold text-amber-900 mb-4">挑戰進度</h2>
                 <div class="flex flex-col md:flex-row items-center md:justify-between space-y-4 md:space-y-0 md:space-x-8">
@@ -539,7 +489,7 @@
             <main id="diary-grid" class="flex flex-wrap justify-center gap-8 mb-10">
             </main>
 
-            <section id="share-view" class="bg-stone-50 border border-stone-200 rounded-lg p-6 mb-10 shadow-sm hidden">
+            <section id="share-view" class="bg-stone-50 border border-stone-200 rounded-lg p-6 mb-10 shadow-sm">
                 <h2 class="text-2xl font-bold text-stone-800 mb-4">與他人分享或查看日記</h2>
                 <p class="text-stone-700 mb-4">你可以將自己的 ID 分享給他人，或輸入他人的 ID 來查看他們的小日記。</p>
                 <div class="flex flex-col md:flex-row gap-4 items-stretch md:items-center">
