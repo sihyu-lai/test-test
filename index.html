@@ -154,8 +154,11 @@
                 });
 
                 const textarea = document.getElementById(`diary-entry-${dayData.day}`);
+                
+                // Add keydown and keyup listeners to prevent default form submission on IME completion
                 textarea.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
+                    // Prevent form submission on 'Enter' key press
+                    if (e.key === 'Enter') {
                         e.preventDefault();
                     }
                 });
