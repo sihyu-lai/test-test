@@ -27,7 +27,6 @@
         let currentUserSimpleId = null;
         let unsubscribe = null;
         let isAdmin = false;
-        let isInitialized = false;
 
         // Make Firebase services globally accessible
         let app = null;
@@ -98,11 +97,7 @@
         }
 
         async function initializeAppLogic() {
-            if (isInitialized) return;
-            isInitialized = true;
-            
             updateUIState('loading');
-
             try {
                 // Initialize Firebase services
                 app = initializeApp(firebaseConfig);
@@ -110,32 +105,34 @@
                 db = getFirestore(app);
                 setLogLevel('Debug');
 
-                // If not already authenticated, sign in
-                if (!auth.currentUser) {
-                    if (initialAuthToken) {
-                        await signInWithCustomToken(auth, initialAuthToken);
+                // Use onAuthStateChanged to ensure the user is logged in before proceeding
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        currentUserId = user.uid;
+                        currentUserSimpleId = await createOrGetSimpleId(currentUserId);
+                        isAdmin = (currentUserSimpleId === ADMIN_ID);
+
+                        if (isAdmin) {
+                            document.getElementById('admin-section').classList.remove('hidden');
+                            document.getElementById('share-view').classList.add('hidden');
+                            document.getElementById('user-diary-view').classList.add('hidden');
+                            loadAllUsers();
+                        } else {
+                            document.getElementById('admin-section').classList.add('hidden');
+                            document.getElementById('share-view').classList.remove('hidden');
+                            document.getElementById('user-diary-view').classList.remove('hidden');
+                            initDiaryUI(currentUserId, currentUserSimpleId);
+                        }
+                        updateUIState('loaded');
                     } else {
-                        await signInAnonymously(auth);
+                        // User is signed out, try to sign in
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(auth, initialAuthToken);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
                     }
-                }
-                
-                currentUserId = auth.currentUser.uid;
-                currentUserSimpleId = await createOrGetSimpleId(currentUserId);
-                isAdmin = (currentUserSimpleId === ADMIN_ID);
-
-                if (isAdmin) {
-                    document.getElementById('admin-section').classList.remove('hidden');
-                    document.getElementById('share-view').classList.add('hidden');
-                    document.getElementById('user-diary-view').classList.add('hidden');
-                    loadAllUsers();
-                } else {
-                    document.getElementById('admin-section').classList.add('hidden');
-                    document.getElementById('share-view').classList.remove('hidden');
-                    document.getElementById('user-diary-view').classList.remove('hidden');
-                    initDiaryUI(currentUserId, currentUserSimpleId);
-                }
-                updateUIState('loaded');
-
+                });
             } catch (e) {
                 console.error("Initialization failed:", e);
                 updateUIState('error', '載入使用者資料失敗，請重試。');
