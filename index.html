@@ -80,8 +80,6 @@
             if (state === 'loading') {
                 loadingContainer.classList.remove('hidden');
             } else if (state === 'loaded') {
-                document.getElementById('user-id-display').textContent = `你的使用者 ID: ${currentUserSimpleId}`;
-                document.getElementById('current-viewing-id').textContent = `目前正在檢視的 ID: ${currentUserSimpleId}`;
                 mainContent.classList.remove('hidden');
             } else if (state === 'error') {
                 errorMessageEl.textContent = message;
@@ -112,10 +110,10 @@
                 if (!user) throw new Error("User authentication failed.");
                 
                 currentUserId = user.uid;
-                currentUserSimpleId = await createOrGetSimpleId(currentUserId);
+                // DO NOT FETCH SIMPLE ID AT STARTUP.
                 
                 // Direct call to initDiaryUI, no admin check needed
-                initDiaryUI(currentUserId, currentUserSimpleId);
+                initDiaryUI(currentUserId, '點此顯示'); // Set default text for simple ID
                 
                 updateUIState('loaded');
 
@@ -156,10 +154,15 @@
             const switchBackBtn = document.getElementById('switch-back-btn');
             const toggleInstructionsBtn = document.getElementById('toggle-instructions');
             const expandableContent = document.getElementById('expandable-content');
+            
+            // New Elements for lazy loading User ID
+            const userIdDisplayEl = document.getElementById('user-id-display');
+            const currentViewingIdEl = document.getElementById('current-viewing-id');
+            const showMyIdBtn = document.getElementById('show-my-id-btn');
 
             document.getElementById('share-view').classList.remove('hidden');
             document.getElementById('user-diary-view').classList.remove('hidden');
-            document.getElementById('current-viewing-id').textContent = `目前正在檢視的 ID: ${simpleIdToDisplay}`;
+            currentViewingIdEl.textContent = `目前正在檢視的 ID: ${simpleIdToDisplay}`;
 
             function showToast(message) {
                 toast.textContent = message;
@@ -380,6 +383,20 @@
                 const isCollapsed = expandableContent.classList.toggle('max-h-0');
                 toggleInstructionsBtn.textContent = isCollapsed ? '閱讀更多 ▼' : '收合 ▲';
             });
+            
+            // NEW: Add event listener for the show user ID button
+            showMyIdBtn.addEventListener('click', async () => {
+                try {
+                    showMyIdBtn.textContent = "載入中...";
+                    currentUserSimpleId = await createOrGetSimpleId(currentUserId);
+                    userIdDisplayEl.textContent = `你的使用者 ID: ${currentUserSimpleId}`;
+                    currentViewingIdEl.textContent = `目前正在檢視的 ID: ${currentUserSimpleId}`;
+                } catch (e) {
+                    console.error("Failed to fetch user ID:", e);
+                    showToast("無法載入使用者 ID，請重試。");
+                    userIdDisplayEl.textContent = "無法顯示 ID";
+                }
+            });
         }
     </script>
     <style>
@@ -440,7 +457,11 @@
         </header>
 
         <section id="user-info" class="bg-gray-100 border border-gray-300 rounded-lg p-4 mb-8 text-center text-sm text-gray-600 break-all">
-            <p id="user-id-display" class="font-bold">你的使用者 ID: 載入中...</p>
+            <div id="user-id-container" class="flex flex-col md:flex-row justify-center items-center md:space-x-4 space-y-2 md:space-y-0">
+                <p id="user-id-display" class="font-bold text-gray-800">你的使用者 ID: 
+                    <button id="show-my-id-btn" class="text-amber-600 hover:text-amber-800 transition duration-300 font-semibold text-sm">點此顯示</button>
+                </p>
+            </div>
             <p id="current-viewing-id" class="mt-4 font-semibold text-gray-700">目前正在檢視的 ID: 載入中...</p>
             <p id="error-message" class="text-red-600 font-bold mt-2 hidden"></p>
             <button id="reload-btn" class="mt-4 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300 hidden">重新載入</button>
