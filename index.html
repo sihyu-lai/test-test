@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>30天親子互動小日記</title>
+    <title>3天親子互動小日記</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -47,7 +47,7 @@
 <body class="antialiased">
     <div class="container mx-auto px-4 py-8 md:py-12 max-w-5xl">
         <header class="text-center mb-8">
-            <h1 class="text-4xl md:text-5xl font-bold text-amber-800">30天親子互動小日記</h1>
+            <h1 class="text-4xl md:text-5xl font-bold text-amber-800">3天親子互動小日記</h1>
             <p class="mt-2 text-lg text-amber-700">讓孩子每天練習，小日記超輕鬆。</p>
         </header>
 
@@ -57,7 +57,7 @@
                 <div class="flex-1 w-full">
                     <div class="flex justify-between items-center mb-1">
                         <span class="text-xl font-semibold text-amber-800">已完成天數</span>
-                        <span id="completed-days" class="text-2xl font-bold text-amber-800">0 / 30 天</span>
+                        <span id="completed-days" class="text-2xl font-bold text-amber-800">0 / 3 天</span>
                     </div>
                     <div class="w-full bg-amber-200 rounded-full h-4 relative overflow-hidden">
                         <div id="progress-bar" class="bg-amber-600 h-full rounded-full transition-all duration-500 ease-in-out" style="width: 0%;"></div>
@@ -90,7 +90,7 @@
             </div>
         </section>
 
-        <main id="diary-grid" class="grid grid-cols-5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4">
+        <main id="diary-grid" class="flex flex-wrap justify-center gap-8">
         </main>
 
         <!-- General Modal for Diary Entry -->
@@ -102,18 +102,18 @@
             </div>
         </div>
         
-        <!-- Special Modal for Day 30 Completion -->
+        <!-- Special Modal for Day 3 Completion -->
         <div id="completion-modal" class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center p-4 hidden z-50">
             <div class="bg-gradient-to-br from-yellow-100 via-white to-green-100 rounded-2xl shadow-2xl w-full max-w-lg flex flex-col p-8 relative border-4 border-yellow-400">
                 <div class="text-center">
                     <div class="text-6xl mb-4 animate-bounce">🎉</div>
                     <h3 class="text-4xl font-bold text-yellow-800 mb-2">恭喜你！</h3>
-                    <p class="text-2xl font-semibold text-gray-800 mb-4">成功完成30天小日記挑戰！</p>
+                    <p class="text-2xl font-semibold text-gray-800 mb-4">成功完成3天小日記挑戰！</p>
                     <p class="text-lg text-gray-600 mb-6">這份堅持與努力值得嘉獎，你真的太棒了！</p>
-                    <a id="coupon-link" href="https://bmai.app/c100692c" target="_blank" class="inline-block bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-8 rounded-full shadow-lg transition-transform transform hover:scale-105">
-                        領取你的專屬禮物！
+                    <img src="https://cms-static.cdn.91app.com/images/original/41627/c15f8b26-e944-465d-98c1-2e79eb4bac59-1754966050-mijvui6ja7_d.png" alt="親子天下購物商標" class="mx-auto my-4 w-48 h-auto object-contain">
+                    <a id="coupon-link" href="https://bmai.app/fbc05a7d" class="inline-block bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-8 rounded-full shadow-lg transition-transform transform hover:scale-105">
+                        領取你的專屬小禮物！
                     </a>
-                    <p class="text-sm text-gray-500 mt-4">親子天下Shopping 100元折價券</p>
                 </div>
             </div>
         </div>
@@ -126,34 +126,7 @@
         const diaryData = [
             { day: 1, theme: '從日常開始', prompt: '今天讓你最開心的事情是什麼？' },
             { day: 2, theme: '從日常開始', prompt: '今天的午餐最好吃的是哪一道？為什麼？' },
-            { day: 3, theme: '從日常開始', prompt: '今天在學校發生一件有趣的小事？' },
-            { day: 4, theme: '從日常開始', prompt: '今天的天氣像什麼東西？（例：太陽像大火球☀️）' },
-            { day: 5, theme: '從日常開始', prompt: '你今天學到一個新的知識是什麼？' },
-            { day: 6, theme: '從日常開始', prompt: '今天有沒有遇到什麼小小挫折？' },
-            { day: 7, theme: '從日常開始', prompt: '如果用一個顏色形容今天，你會選哪一個？' },
-            { day: 8, theme: '生活觀察', prompt: '路上你看到最特別的一樣東西？' },
-            { day: 9, theme: '生活觀察', prompt: '今天聽到一個最有趣的聲音是什麼？' },
-            { day: 10, theme: '生活觀察', prompt: '如果你是一隻小鳥，今天會飛去哪裡？' },
-            { day: 11, theme: '生活觀察', prompt: '今天和同學的對話中，哪一句話讓你印象最深？' },
-            { day: 12, theme: '生活觀察', prompt: '你今天幫助了誰嗎？感覺怎麼樣？' },
-            { day: 13, theme: '生活觀察', prompt: '今天覺得最香的味道是什麼？' },
-            { day: 14, theme: '生活觀察', prompt: '今天覺得最舒服的一個時刻是什麼？' },
-            { day: 15, theme: '想像力挑戰', prompt: '如果今天的天空會說話，它會跟你說什麼？' },
-            { day: 16, theme: '想像力挑戰', prompt: '如果你可以當一天的老師，你會做什麼？' },
-            { day: 17, theme: '想像力挑戰', prompt: '如果你的書包會講話，它會怎麼抱怨？' },
-            { day: 18, theme: '想像力挑戰', prompt: '如果下雨天能變成糖果雨，你會怎麼做？' },
-            { day: 19, theme: '想像力挑戰', prompt: '假如你是一部卡通人物，今天會發生什麼冒險？' },
-            { day: 20, theme: '想像力挑戰', prompt: '如果你能把今天拍成一部短片，片名會叫什麼？' },
-            { day: 21, theme: '想像力挑戰', prompt: '今天你最想要擁有什麼超能力？' },
-            { day: 22, theme: '心情與反思', prompt: '今天有沒有讓你覺得驕傲的事？' },
-            { day: 23, theme: '心情與反思', prompt: '今天有沒有一件事讓你有點後悔？' },
-            { day: 24, theme: '心情與反思', prompt: '今天你覺得最幸運的時刻是什麼？' },
-            { day: 25, theme: '心情與反思', prompt: '今天如果要寫一句「感謝」的話，你想謝謝誰？' },
-            { day: 26, theme: '心情與反思', prompt: '今天你有沒有發現一個新朋友？' },
-            { day: 27, theme: '心情與反思', prompt: '今天你對自己說的一句鼓勵的話？' },
-            { day: 28, theme: '心情與反思', prompt: '今天你最想要把什麼事情留在回憶裡？' },
-            { day: 29, theme: '心情與反思', prompt: '今天如果要用三個表情符號來形容，會是哪三個？' },
-            { day: 30, theme: '心情與反思', prompt: '今天，你想寫給明天的自己一句話？' }
+            { day: 3, theme: '從日常開始', prompt: '今天在學校發生一件有趣的小事？' }
         ];
         
         const encouragingWords = [
@@ -195,7 +168,7 @@
             localStorage.setItem('diaryEntries', JSON.stringify(entries));
             
             if (content.trim() !== '' || image) {
-                if (day === 30) {
+                if (day === 3) {
                     closeModal(); // Close the regular modal first
                     completionModal.classList.remove('hidden');
                 } else {
@@ -256,13 +229,19 @@
                 }
             });
 
+            const textarea = document.getElementById(`diary-entry-${dayData.day}`);
+            textarea.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) { // Prevents saving on simple Enter, allows for multiline with Shift+Enter
+                    e.preventDefault();
+                }
+            });
+
             const saveBtn = document.getElementById('save-btn');
             saveBtn.onclick = () => {
-                const textarea = document.getElementById(`diary-entry-${dayData.day}`);
                 saveEntry(dayData.day, textarea.value, uploadedImageBase64);
                 
-                // Only close the modal and re-render if it's not Day 30
-                if (dayData.day !== 30) {
+                // Only close the modal and re-render if it's not Day 3
+                if (dayData.day !== 3) {
                   closeModal();
                   renderGrid();
                   updateProgressDisplay();
@@ -271,7 +250,7 @@
                       nextDayCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
                   }
                 } else {
-                  // For Day 30, saving triggers the completion modal, so we close it here and let the other modal show up.
+                  // For Day 3, saving triggers the completion modal, so we close it here and let the other modal show up.
                   closeModal();
                   renderGrid();
                   updateProgressDisplay();
@@ -307,7 +286,7 @@
                 const hasImage = entry.image;
 
                 const card = document.createElement('div');
-                card.className = `h-28 md:h-32 rounded-lg cursor-pointer flex justify-center items-center shadow-md transition-transform transform hover:scale-105 relative ${hasContent ? 'completed' : ''} ${hasImage ? 'has-image' : ''}`;
+                card.className = `h-28 md:h-32 w-28 md:w-32 rounded-lg cursor-pointer flex-shrink-0 flex justify-center items-center shadow-md transition-transform transform hover:scale-105 relative ${hasContent ? 'completed' : ''} ${hasImage ? 'has-image' : ''}`;
                 card.dataset.day = item.day; // Add data-day attribute for easy selection
                 card.innerHTML = `
                     <div class="card-front w-full h-full bg-amber-100 border-2 border-amber-200 text-amber-800 flex flex-col justify-center items-center rounded-lg p-2">
