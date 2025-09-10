@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3天親子互動小日記 - 管理者版</title>
+    <title>3天親子互動小日記</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -339,7 +339,7 @@
                             <li>2. 直接打字： 在下方空格中，輸入你的心情或日記內容。</li>
                         </ul>
                     </div>
-                    ${isViewingOwnDiary ? '' : '<p class="bg-red-100 text-red-700 p-2 rounded-lg text-sm text-center mb-4">這份日記是唯讀的，你沒有權限修改。</p>'}
+                    ${isViewingOwnDiary ? '' : '<p class="bg-stone-200 text-stone-700 p-2 rounded-lg text-sm text-center mb-4">這份日記是唯讀的，你沒有權限修改。</p>'}
                     <div id="image-preview" class="mb-4">
                         ${entryImage ? `<img src="${entryImage}" class="w-full h-auto rounded-lg shadow-md mb-2 object-contain" alt="日記圖片預覽">` : ''}
                     </div>
