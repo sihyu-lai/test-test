@@ -69,23 +69,19 @@
         function updateUIState(state, message = '') {
             const loadingContainer = document.getElementById('loading-container');
             const mainContent = document.getElementById('main-content');
-            const errorMessageEl = document.getElementById('error-message');
-            const reloadBtn = document.getElementById('reload-btn');
+            const errorContainer = document.getElementById('error-container');
 
             loadingContainer.classList.add('hidden');
             mainContent.classList.add('hidden');
-            errorMessageEl.classList.add('hidden');
-            reloadBtn.classList.add('hidden');
+            errorContainer.classList.add('hidden');
 
             if (state === 'loading') {
                 loadingContainer.classList.remove('hidden');
             } else if (state === 'loaded') {
                 mainContent.classList.remove('hidden');
             } else if (state === 'error') {
-                errorMessageEl.textContent = message;
-                errorMessageEl.classList.remove('hidden');
-                reloadBtn.classList.remove('hidden');
-                loadingContainer.classList.add('hidden');
+                document.getElementById('error-message').textContent = message;
+                errorContainer.classList.remove('hidden');
             }
         }
 
@@ -110,7 +106,6 @@
                 if (!user) throw new Error("User authentication failed.");
                 
                 currentUserId = user.uid;
-                // DO NOT FETCH SIMPLE ID AT STARTUP.
                 
                 // Direct call to initDiaryUI, no admin check needed
                 initDiaryUI(currentUserId, '點此顯示'); // Set default text for simple ID
@@ -395,6 +390,8 @@
                     console.error("Failed to fetch user ID:", e);
                     showToast("無法載入使用者 ID，請重試。");
                     userIdDisplayEl.textContent = "無法顯示 ID";
+                } finally {
+                     showMyIdBtn.textContent = "重新顯示我的 ID";
                 }
             });
         }
@@ -444,11 +441,22 @@
     </style>
 </head>
 <body class="antialiased">
+    <!-- Loading Container -->
     <div id="loading-container" class="fixed inset-0 bg-white bg-opacity-70 flex flex-col items-center justify-center z-50 transition-opacity duration-300">
         <div class="loading-spinner mb-4"></div>
         <p class="text-xl font-semibold text-amber-700">正在為你準備小日記...</p>
     </div>
     
+    <!-- Error Container -->
+    <div id="error-container" class="fixed inset-0 bg-white bg-opacity-90 flex flex-col items-center justify-center p-4 z-50 hidden">
+        <div class="text-center p-8 bg-red-50 border-2 border-red-200 rounded-lg shadow-md">
+            <h2 class="text-3xl font-bold text-red-700 mb-4">載入失敗</h2>
+            <p id="error-message" class="text-lg text-red-600 mb-6">發生了意料之外的錯誤，請再試一次。</p>
+            <button onclick="initializeAppLogic()" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300">重新載入</button>
+        </div>
+    </div>
+    
+    <!-- Main Content -->
     <div id="main-content" class="container mx-auto px-4 py-8 md:py-12 max-w-5xl hidden">
         <header class="text-center mb-8">
             <img src="https://cms-static.cdn.91app.com/images/original/41627/c15f8b26-e944-465d-98c1-2e79eb4bac59-1754966050-mijvui6ja7_d.png" alt="親子天下購物商標" class="mx-auto mb-4 w-64 h-auto object-contain">
@@ -463,8 +471,6 @@
                 </p>
             </div>
             <p id="current-viewing-id" class="mt-4 font-semibold text-gray-700">目前正在檢視的 ID: 載入中...</p>
-            <p id="error-message" class="text-red-600 font-bold mt-2 hidden"></p>
-            <button id="reload-btn" class="mt-4 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300 hidden">重新載入</button>
         </section>
 
         <section id="user-diary-view">
