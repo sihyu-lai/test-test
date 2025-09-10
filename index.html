@@ -51,10 +51,12 @@
         async function initializeAppLogic() {
             updateUIState('loading');
             try {
-                app = initializeApp(firebaseConfig);
-                auth = getAuth(app);
-                db = getFirestore(app);
-                setLogLevel('Debug');
+                if (!app) {
+                    app = initializeApp(firebaseConfig);
+                    auth = getAuth(app);
+                    db = getFirestore(app);
+                    setLogLevel('Debug');
+                }
                 
                 if (initialAuthToken) {
                     await signInWithCustomToken(auth, initialAuthToken);
@@ -63,7 +65,9 @@
                 }
                 
                 const user = auth.currentUser;
-                if (!user) throw new Error("User authentication failed.");
+                if (!user) {
+                    throw new Error("User authentication failed.");
+                }
                 
                 currentUserId = user.uid;
                 
