@@ -23,39 +23,20 @@
         // In a real application, you would use a more robust authentication system.
         const ADMIN_ID = "admin-Shopping";
 
-        // Initialize Firebase services
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-
-        // Set Firebase log level for debugging
-        setLogLevel('Debug');
-
-        let currentUserId = null; // The internal Firebase UID
-        let currentUserSimpleId = null; // The simplified ID for display
+        let currentUserId = null;
+        let currentUserSimpleId = null;
         let unsubscribe = null;
         let isAdmin = false;
         let isInitialized = false;
 
-        // --- Load Timeout Mechanism ---
-        let loadTimeout = null;
-        const LOADING_TIMEOUT_MS = 10000; // 10 seconds
+        // Make Firebase services globally accessible
+        let app = null;
+        let auth = null;
+        let db = null;
 
-        function startLoadTimeout() {
-            if (loadTimeout) clearTimeout(loadTimeout);
-            loadTimeout = setTimeout(() => {
-                updateUIState('error', '載入超時，請檢查網路連線或稍後再試。');
-            }, LOADING_TIMEOUT_MS);
-        }
-
-        function clearLoadTimeout() {
-            if (loadTimeout) {
-                clearTimeout(loadTimeout);
-                loadTimeout = null;
-            }
-        }
-        // --- End Timeout Mechanism ---
-
+        // Start initialization immediately
+        initializeAppLogic();
+        
         async function createOrGetSimpleId(uid) {
             if (!auth.currentUser) {
                 console.error("Firestore operation denied: User not authenticated.");
@@ -77,7 +58,6 @@
             }
         }
         
-        // Helper function to get Firebase UID from simple ID
         async function getUidFromSimpleId(simpleId) {
             if (!auth.currentUser) {
                 console.error("Firestore operation denied: User not authenticated.");
@@ -93,41 +73,43 @@
         }
         
         function updateUIState(state, message = '') {
-            const userIdDisplay = document.getElementById('user-id-display');
-            const currentViewingIdEl = document.getElementById('current-viewing-id');
+            const loadingContainer = document.getElementById('loading-container');
             const mainContent = document.getElementById('main-content');
-            const loadingMessage = document.getElementById('loading-message');
             const errorMessageEl = document.getElementById('error-message');
             const reloadBtn = document.getElementById('reload-btn');
 
-            loadingMessage.classList.add('hidden');
+            loadingContainer.classList.add('hidden');
             mainContent.classList.add('hidden');
             errorMessageEl.classList.add('hidden');
             reloadBtn.classList.add('hidden');
 
             if (state === 'loading') {
-                loadingMessage.classList.remove('hidden');
+                loadingContainer.classList.remove('hidden');
             } else if (state === 'loaded') {
-                userIdDisplay.textContent = `你的使用者 ID: ${currentUserSimpleId} ${isAdmin ? '(管理者)' : ''}`;
-                currentViewingIdEl.textContent = `目前正在檢視的 ID: ${currentUserSimpleId}`;
+                document.getElementById('user-id-display').textContent = `你的使用者 ID: ${currentUserSimpleId} ${isAdmin ? '(管理者)' : ''}`;
+                document.getElementById('current-viewing-id').textContent = `目前正在檢視的 ID: ${currentUserSimpleId}`;
                 mainContent.classList.remove('hidden');
             } else if (state === 'error') {
-                userIdDisplay.textContent = `載入失敗！`;
                 errorMessageEl.textContent = message;
                 errorMessageEl.classList.remove('hidden');
                 reloadBtn.classList.remove('hidden');
+                loadingContainer.classList.add('hidden');
             }
         }
 
-        // Main initialization function
         async function initializeAppLogic() {
             if (isInitialized) return;
             isInitialized = true;
             
             updateUIState('loading');
-            startLoadTimeout();
 
             try {
+                // Initialize Firebase services
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                setLogLevel('Debug');
+
                 // If not already authenticated, sign in
                 if (!auth.currentUser) {
                     if (initialAuthToken) {
@@ -140,7 +122,6 @@
                 currentUserId = auth.currentUser.uid;
                 currentUserSimpleId = await createOrGetSimpleId(currentUserId);
                 isAdmin = (currentUserSimpleId === ADMIN_ID);
-                clearLoadTimeout();
 
                 if (isAdmin) {
                     document.getElementById('admin-section').classList.remove('hidden');
@@ -156,38 +137,9 @@
                 updateUIState('loaded');
 
             } catch (e) {
-                clearLoadTimeout();
                 console.error("Initialization failed:", e);
                 updateUIState('error', '載入使用者資料失敗，請重試。');
             }
-        }
-
-        // Listen for auth state changes
-        onAuthStateChanged(auth, async (user) => {
-            if (user && !isInitialized) {
-                initializeAppLogic();
-            } else if (!user) {
-                // User is not signed in, sign them in anonymously
-                if (!isInitialized) {
-                     initializeAppLogic();
-                }
-            }
-        });
-        
-        // This part is now outside the initApp function
-        const expandableContent = document.getElementById('expandable-content');
-        const toggleBtn = document.getElementById('toggle-instructions');
-        if (toggleBtn && expandableContent) {
-            toggleBtn.addEventListener('click', () => {
-                const isExpanded = expandableContent.classList.contains('max-h-screen');
-                if (isExpanded) {
-                    expandableContent.classList.remove('max-h-screen');
-                    toggleBtn.textContent = '閱讀更多 ▼';
-                } else {
-                    expandableContent.classList.add('max-h-screen');
-                    toggleBtn.textContent = '收起 ▲';
-                }
-            });
         }
         
         async function loadAllUsers() {
@@ -252,11 +204,10 @@
             const loadIdInput = document.getElementById('load-id-input');
             const loadIdBtn = document.getElementById('load-id-btn');
             const switchBackBtn = document.getElementById('switch-back-btn');
-            const currentViewingIdEl = document.getElementById('current-viewing-id');
 
             document.getElementById('share-view').classList.remove('hidden');
             document.getElementById('user-diary-view').classList.remove('hidden');
-            document.getElementById('admin-section').classList.add('hidden'); // Ensure admin section is hidden
+            document.getElementById('admin-section').classList.add('hidden');
             document.getElementById('current-viewing-id').textContent = `目前正在檢視的 ID: ${simpleIdToDisplay}`;
 
             function showToast(message) {
@@ -298,7 +249,6 @@
                 }
             }
 
-            // Real-time listener for the current user's diary
             if (unsubscribe) {
                 unsubscribe();
             }
@@ -431,7 +381,8 @@
                     }
                 };
             }
-
+            
+            // This is now outside openModal to ensure it's always attached
             loadIdBtn.addEventListener('click', async () => {
                 const newSimpleId = loadIdInput.value.trim();
                 if (newSimpleId) {
@@ -474,7 +425,6 @@
             });
         }
     </script>
-
     <style>
         body {
             font-family: 'Noto Sans TC', sans-serif;
@@ -505,15 +455,26 @@
             border-color: #DCE775;
             color: #33691E;
         }
+        /* Custom Loading Spinner */
+        .loading-spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top-color: #fca5a5;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body class="antialiased">
-    <div id="loading-message" class="fixed inset-0 bg-white bg-opacity-70 flex items-center justify-center z-50">
-        <div class="text-center p-4 rounded-lg">
-            <div class="animate-spin rounded-full h-12 w-12 border-4 border-amber-500 border-t-transparent mb-4"></div>
-            <p class="text-xl font-semibold text-amber-700">正在載入使用者 ID...</p>
-        </div>
+    <div id="loading-container" class="fixed inset-0 bg-white bg-opacity-70 flex flex-col items-center justify-center z-50 transition-opacity duration-300">
+        <div class="loading-spinner mb-4"></div>
+        <p class="text-xl font-semibold text-amber-700">正在為你準備小日記...</p>
     </div>
+    
     <div id="main-content" class="container mx-auto px-4 py-8 md:py-12 max-w-5xl hidden">
         <header class="text-center mb-8">
             <img src="https://cms-static.cdn.91app.com/images/original/41627/c15f8b26-e944-465d-98c1-2e79eb4bac59-1754966050-mijvui6ja7_d.png" alt="親子天下購物商標" class="mx-auto mb-4 w-64 h-auto object-contain">
