@@ -105,34 +105,36 @@
                 db = getFirestore(app);
                 setLogLevel('Debug');
 
-                // Use onAuthStateChanged to ensure the user is logged in before proceeding
-                onAuthStateChanged(auth, async (user) => {
-                    if (user) {
-                        currentUserId = user.uid;
-                        currentUserSimpleId = await createOrGetSimpleId(currentUserId);
-                        isAdmin = (currentUserSimpleId === ADMIN_ID);
+                // Sign in the user first
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                
+                // Then, get the user info and proceed
+                const user = auth.currentUser;
+                if (user) {
+                    currentUserId = user.uid;
+                    currentUserSimpleId = await createOrGetSimpleId(currentUserId);
+                    isAdmin = (currentUserSimpleId === ADMIN_ID);
 
-                        if (isAdmin) {
-                            document.getElementById('admin-section').classList.remove('hidden');
-                            document.getElementById('share-view').classList.add('hidden');
-                            document.getElementById('user-diary-view').classList.add('hidden');
-                            loadAllUsers();
-                        } else {
-                            document.getElementById('admin-section').classList.add('hidden');
-                            document.getElementById('share-view').classList.remove('hidden');
-                            document.getElementById('user-diary-view').classList.remove('hidden');
-                            initDiaryUI(currentUserId, currentUserSimpleId);
-                        }
-                        updateUIState('loaded');
+                    if (isAdmin) {
+                        document.getElementById('admin-section').classList.remove('hidden');
+                        document.getElementById('share-view').classList.add('hidden');
+                        document.getElementById('user-diary-view').classList.add('hidden');
+                        loadAllUsers();
                     } else {
-                        // User is signed out, try to sign in
-                        if (initialAuthToken) {
-                            await signInWithCustomToken(auth, initialAuthToken);
-                        } else {
-                            await signInAnonymously(auth);
-                        }
+                        document.getElementById('admin-section').classList.add('hidden');
+                        document.getElementById('share-view').classList.remove('hidden');
+                        document.getElementById('user-diary-view').classList.remove('hidden');
+                        initDiaryUI(currentUserId, currentUserSimpleId);
                     }
-                });
+                    updateUIState('loaded');
+                } else {
+                    throw new Error("User authentication failed.");
+                }
+
             } catch (e) {
                 console.error("Initialization failed:", e);
                 updateUIState('error', '載入使用者資料失敗，請重試。');
