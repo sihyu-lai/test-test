@@ -12,7 +12,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, onSnapshot, setDoc, setLogLevel, collection, getDocs, query, where, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, onSnapshot, setDoc, setLogLevel, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Global variables for Firebase
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
@@ -20,7 +20,6 @@
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         
         let currentUserId = null;
-        let currentUserSimpleId = null;
         let unsubscribe = null;
 
         // Make Firebase services globally accessible
@@ -28,43 +27,7 @@
         let auth = null;
         let db = null;
 
-        // Start initialization immediately
         initializeAppLogic();
-        
-        async function createOrGetSimpleId(uid) {
-            if (!auth.currentUser) {
-                console.error("Firestore operation denied: User not authenticated.");
-                return null;
-            }
-            const userRef = doc(db, `artifacts/${appId}/public/data/user_profiles`, uid);
-            try {
-                const userSnap = await getDoc(userRef);
-                if (userSnap.exists() && userSnap.data().simpleId) {
-                    return userSnap.data().simpleId;
-                } else {
-                    const newSimpleId = uid.substring(0, 6);
-                    await setDoc(userRef, { simpleId: newSimpleId, uid: uid }, { merge: true });
-                    return newSimpleId;
-                }
-            } catch (e) {
-                console.error("Error creating or getting simple ID:", e);
-                throw e; // Propagate the error
-            }
-        }
-        
-        async function getUidFromSimpleId(simpleId) {
-            if (!auth.currentUser) {
-                console.error("Firestore operation denied: User not authenticated.");
-                return null;
-            }
-            const usersRef = collection(db, `artifacts/${appId}/public/data/user_profiles`);
-            const q = query(usersRef, where("simpleId", "==", simpleId));
-            const querySnapshot = await getDocs(q);
-            if (!querySnapshot.empty) {
-                return querySnapshot.docs[0].id;
-            }
-            return null;
-        }
         
         function updateUIState(state, message = '') {
             const loadingContainer = document.getElementById('loading-container');
@@ -88,27 +51,23 @@
         async function initializeAppLogic() {
             updateUIState('loading');
             try {
-                // Initialize Firebase services
                 app = initializeApp(firebaseConfig);
                 auth = getAuth(app);
                 db = getFirestore(app);
                 setLogLevel('Debug');
                 
-                // Sign in the user first
                 if (initialAuthToken) {
                     await signInWithCustomToken(auth, initialAuthToken);
                 } else {
                     await signInAnonymously(auth);
                 }
                 
-                // Then, get the user info and proceed
                 const user = auth.currentUser;
                 if (!user) throw new Error("User authentication failed.");
                 
                 currentUserId = user.uid;
                 
-                // Direct call to initDiaryUI, no admin check needed
-                initDiaryUI(currentUserId, '點此顯示'); // Set default text for simple ID
+                initDiaryUI(currentUserId);
                 
                 updateUIState('loaded');
 
@@ -118,8 +77,8 @@
             }
         }
         
-        function initDiaryUI(userIdToLoad, simpleIdToDisplay) {
-            console.log(`Loading diary for user ID: ${userIdToLoad}`);
+        function initDiaryUI(userId) {
+            console.log(`Loading diary for user ID: ${userId}`);
 
             const diaryData = [
                 { day: 1, theme: '從日常開始', prompt: '今天讓你最開心的事情是什麼？' },
@@ -144,21 +103,9 @@
             const progressPercentageEl = document.getElementById('progress-percentage');
             const progressBarEl = document.getElementById('progress-bar');
             const toast = document.getElementById('toast');
-            const loadIdInput = document.getElementById('load-id-input');
-            const loadIdBtn = document.getElementById('load-id-btn');
-            const switchBackBtn = document.getElementById('switch-back-btn');
             const toggleInstructionsBtn = document.getElementById('toggle-instructions');
             const expandableContent = document.getElementById('expandable-content');
             
-            // New Elements for lazy loading User ID
-            const userIdDisplayEl = document.getElementById('user-id-display');
-            const currentViewingIdEl = document.getElementById('current-viewing-id');
-            const showMyIdBtn = document.getElementById('show-my-id-btn');
-
-            document.getElementById('share-view').classList.remove('hidden');
-            document.getElementById('user-diary-view').classList.remove('hidden');
-            currentViewingIdEl.textContent = `目前正在檢視的 ID: ${simpleIdToDisplay}`;
-
             function showToast(message) {
                 toast.textContent = message;
                 toast.classList.add('opacity-100');
@@ -172,11 +119,8 @@
                     showToast("身份驗證失敗，請重試。");
                     return;
                 }
-                if (userIdToLoad !== currentUserId) {
-                    showToast("你沒有權限修改其他人的日記！");
-                    return;
-                }
-                const diaryRef = doc(db, `artifacts/${appId}/public/data/diaries`, userIdToLoad);
+                
+                const diaryRef = doc(db, `artifacts/${appId}/public/data/diaries`, userId);
                 let entriesToSave = { ...entries };
                 entriesToSave[day] = { text: content, image: image, timestamp: Date.now() };
 
@@ -202,7 +146,7 @@
                 unsubscribe();
             }
 
-            const diaryRef = doc(db, `artifacts/${appId}/public/data/diaries`, userIdToLoad);
+            const diaryRef = doc(db, `artifacts/${appId}/public/data/diaries`, userId);
             let entries = {};
 
             unsubscribe = onSnapshot(diaryRef, (snapshot) => {
@@ -263,8 +207,7 @@
                 const entry = entries[dayData.day] || {};
                 const entryText = entry.text || '';
                 const entryImage = entry.image || '';
-                const isViewingOwnDiary = userIdToLoad === currentUserId;
-
+                
                 modalContent.innerHTML = `
                     <div class="text-center mb-4">
                         <span class="text-sm bg-amber-100 text-amber-800 px-3 py-1 rounded-full">${dayData.theme}</span>
@@ -278,19 +221,18 @@
                             <li>2. 直接打字： 在下方空格中，輸入你的心情或日記內容。</li>
                         </ul>
                     </div>
-                    ${isViewingOwnDiary ? '' : '<p class="bg-stone-200 text-stone-700 p-2 rounded-lg text-sm text-center mb-4">這份日記是唯讀的，你沒有權限修改。</p>'}
                     <div id="image-preview" class="mb-4">
                         ${entryImage ? `<img src="${entryImage}" class="w-full h-auto rounded-lg shadow-md mb-2 object-contain" alt="日記圖片預覽">` : ''}
                     </div>
                     <div class="mb-4 flex flex-col items-start space-y-2">
-                        <label for="image-upload" class="bg-amber-600 text-white font-bold py-2 px-4 rounded-lg cursor-pointer hover:bg-amber-700 transition duration-300 text-sm ${isViewingOwnDiary ? '' : 'hidden'}">
+                        <label for="image-upload" class="bg-amber-600 text-white font-bold py-2 px-4 rounded-lg cursor-pointer hover:bg-amber-700 transition duration-300 text-sm">
                             上傳圖片
                         </label>
                         <input type="file" id="image-upload" accept="image/*" class="hidden">
                     </div>
-                    <textarea id="diary-entry-${dayData.day}" class="w-full h-48 p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-amber-400 focus:border-amber-400 transition ${isViewingOwnDiary ? '' : 'bg-gray-100 cursor-not-allowed'}" placeholder="在這裡寫下你的小日記..." ${isViewingOwnDiary ? '' : 'readonly'}>${entryText}</textarea>
+                    <textarea id="diary-entry-${dayData.day}" class="w-full h-48 p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-amber-400 focus:border-amber-400 transition" placeholder="在這裡寫下你的小日記...">${entryText}</textarea>
                     <div class="mt-4 flex justify-end">
-                        <button id="save-btn" class="bg-amber-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-amber-700 transition duration-300 ${isViewingOwnDiary ? '' : 'hidden'}">儲存</button>
+                        <button id="save-btn" class="bg-amber-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-amber-700 transition duration-300">儲存</button>
                     </div>
                 `;
                 modal.classList.remove('hidden');
@@ -331,27 +273,6 @@
                 };
             }
             
-            // This is now outside openModal to ensure it's always attached
-            loadIdBtn.addEventListener('click', async () => {
-                const newSimpleId = loadIdInput.value.trim();
-                if (newSimpleId) {
-                    const newUid = await getUidFromSimpleId(newSimpleId);
-                    if (newUid) {
-                        initDiaryUI(newUid, newSimpleId);
-                        document.getElementById('switch-back-btn').classList.remove('hidden');
-                    } else {
-                        showToast("找不到該使用者 ID，請確認後再試。");
-                    }
-                } else {
-                    showToast("請輸入有效的使用者 ID。");
-                }
-            });
-
-            switchBackBtn.addEventListener('click', () => {
-                initDiaryUI(currentUserId, currentUserSimpleId);
-                document.getElementById('switch-back-btn').classList.add('hidden');
-            });
-
             function closeModal() {
                 modal.classList.add('hidden');
             }
@@ -373,26 +294,9 @@
                 }
             });
 
-            // FIXED: Add event listener for the toggle button
             toggleInstructionsBtn.addEventListener('click', () => {
                 const isCollapsed = expandableContent.classList.toggle('max-h-0');
                 toggleInstructionsBtn.textContent = isCollapsed ? '閱讀更多 ▼' : '收合 ▲';
-            });
-            
-            // NEW: Add event listener for the show user ID button
-            showMyIdBtn.addEventListener('click', async () => {
-                try {
-                    showMyIdBtn.textContent = "載入中...";
-                    currentUserSimpleId = await createOrGetSimpleId(currentUserId);
-                    userIdDisplayEl.textContent = `你的使用者 ID: ${currentUserSimpleId}`;
-                    currentViewingIdEl.textContent = `目前正在檢視的 ID: ${currentUserSimpleId}`;
-                } catch (e) {
-                    console.error("Failed to fetch user ID:", e);
-                    showToast("無法載入使用者 ID，請重試。");
-                    userIdDisplayEl.textContent = "無法顯示 ID";
-                } finally {
-                     showMyIdBtn.textContent = "重新顯示我的 ID";
-                }
             });
         }
     </script>
@@ -464,15 +368,6 @@
             <p class="mt-2 text-lg text-amber-700">讓孩子每天練習，小日記超輕鬆。</p>
         </header>
 
-        <section id="user-info" class="bg-gray-100 border border-gray-300 rounded-lg p-4 mb-8 text-center text-sm text-gray-600 break-all">
-            <div id="user-id-container" class="flex flex-col md:flex-row justify-center items-center md:space-x-4 space-y-2 md:space-y-0">
-                <p id="user-id-display" class="font-bold text-gray-800">你的使用者 ID: 
-                    <button id="show-my-id-btn" class="text-amber-600 hover:text-amber-800 transition duration-300 font-semibold text-sm">點此顯示</button>
-                </p>
-            </div>
-            <p id="current-viewing-id" class="mt-4 font-semibold text-gray-700">目前正在檢視的 ID: 載入中...</p>
-        </section>
-
         <section id="user-diary-view">
             <section id="progress-section" class="bg-amber-100 border border-amber-300 rounded-lg p-6 mb-10 shadow-sm">
                 <h2 class="text-2xl font-bold text-amber-900 mb-4">挑戰進度</h2>
@@ -515,16 +410,6 @@
 
             <main id="diary-grid" class="flex flex-wrap justify-center gap-8 mb-10">
             </main>
-
-            <section id="share-view" class="bg-stone-50 border border-stone-200 rounded-lg p-6 mb-10 shadow-sm">
-                <h2 class="text-2xl font-bold text-stone-800 mb-4">與他人分享或查看日記</h2>
-                <p class="text-stone-700 mb-4">你可以將自己的 ID 分享給他人，或輸入他人的 ID 來查看他們的小日記。</p>
-                <div class="flex flex-col md:flex-row gap-4 items-stretch md:items-center">
-                    <input type="text" id="load-id-input" placeholder="請在這裡貼上或輸入其他人的 ID..." class="flex-1 p-3 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-400 transition">
-                    <button id="load-id-btn" class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300 w-full md:w-auto">載入日記</button>
-                </div>
-                <button id="switch-back-btn" class="mt-4 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300 w-full hidden">切換回我的日記</button>
-            </section>
         </section>
 
         <!-- General Modal for Diary Entry -->
